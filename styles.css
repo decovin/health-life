@@ -76,6 +76,7 @@ svg {
 }
 
 .header-title {
+  position: relative;
   text-align: center;
 }
 
@@ -117,6 +118,16 @@ svg {
   opacity: 0;
   pointer-events: auto;
   cursor: pointer;
+}
+
+.title-date-input {
+  top: auto !important;
+  right: 0;
+  bottom: -4px;
+  left: 0 !important;
+  width: 100% !important;
+  height: 34px !important;
+  min-height: 34px !important;
 }
 
 .icon-button span,
@@ -801,6 +812,16 @@ textarea {
   .native-date-input {
     top: 12px;
     left: 14px;
+  }
+
+  .title-date-input {
+    top: auto !important;
+    right: 0;
+    bottom: -4px;
+    left: 0 !important;
+    width: 100% !important;
+    height: 34px !important;
+    min-height: 34px !important;
   }
 
   .meal-card {

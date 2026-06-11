@@ -208,8 +208,9 @@ function renderDate() {
   });
   const suffix = selectedDate === today ? "Hoje, " : "";
   document.getElementById("todayLabel").textContent = `${suffix}${formatter.format(parseIsoDate(selectedDate))}`;
-  const input = document.getElementById("historyDateInput");
-  if (input) input.value = selectedDate;
+  getDateInputs().forEach((input) => {
+    input.value = selectedDate;
+  });
 }
 
 function setSyncStatus(text) {
@@ -239,28 +240,35 @@ function bindNavigation() {
 }
 
 function bindCalendar() {
-  const input = document.getElementById("historyDateInput");
-  input.value = selectedDate;
-
-  document.getElementById("openCalendar").addEventListener("click", () => {
+  getDateInputs().forEach((input) => {
     input.value = selectedDate;
-    if (typeof input.showPicker === "function") {
-      input.showPicker();
-      return;
-    }
-    input.focus();
-    input.click();
+
+    input.addEventListener("change", async () => {
+      if (input.value) await selectDate(input.value);
+    });
+
+    input.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter" && input.value) {
+        await selectDate(input.value);
+      }
+    });
   });
 
-  input.addEventListener("change", async () => {
-    if (input.value) await selectDate(input.value);
-  });
+  document.getElementById("openCalendar").addEventListener("click", () => openNativeDatePicker(document.getElementById("historyDateInput")));
+}
 
-  input.addEventListener("keydown", async (event) => {
-    if (event.key === "Enter" && input.value) {
-      await selectDate(input.value);
-    }
-  });
+function getDateInputs() {
+  return [...document.querySelectorAll(".native-date-input")];
+}
+
+function openNativeDatePicker(input) {
+  input.value = selectedDate;
+  if (typeof input.showPicker === "function") {
+    input.showPicker();
+    return;
+  }
+  input.focus();
+  input.click();
 }
 
 async function selectDate(date) {
