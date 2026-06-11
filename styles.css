@@ -81,7 +81,7 @@ svg {
 
 .header-title h1 {
   margin: 0;
-  font-size: clamp(28px, 6vw, 40px);
+  font-size: clamp(23px, 5.2vw, 38px);
   line-height: 1.05;
   letter-spacing: 0;
 }

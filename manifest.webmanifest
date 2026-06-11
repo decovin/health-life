@@ -1,9 +1,16 @@
 {
-  "name": "Fitness Vinicius",
-  "short_name": "Fitness",
+  "name": "Helth Life by Deco",
+  "short_name": "Health Life",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f5f1e8",
-  "theme_color": "#10251f",
-  "icons": []
+  "background_color": "#070807",
+  "theme_color": "#070807",
+  "icons": [
+    {
+      "src": "/icons/health-life.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

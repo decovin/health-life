@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Health Life</title>
+  <desc id="desc">Black app icon with orange Health Life lettering.</desc>
+  <rect width="512" height="512" rx="104" fill="#070807"/>
+  <rect x="28" y="28" width="456" height="456" rx="84" fill="#111210" stroke="#ff8a12" stroke-width="8"/>
+  <path d="M130 282c-31-31-51-55-51-92 0-39 27-68 65-68 23 0 43 12 55 31 12-19 32-31 55-31 38 0 65 29 65 68 0 37-20 61-51 92l-69 68-69-68Z" fill="none" stroke="#ff8a12" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M315 256h34l19-46 35 100 20-54h36" fill="none" stroke="#ff8a12" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="256" y="395" text-anchor="middle" fill="#ff8a12" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="900" letter-spacing="0">Health</text>
+  <text x="256" y="449" text-anchor="middle" fill="#f4f4f1" font-family="Inter, Arial, sans-serif" font-size="52" font-weight="900" letter-spacing="0">Life</text>
+</svg>
