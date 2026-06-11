@@ -1,10 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">Health Life</title>
-  <desc id="desc">Black app icon with orange Health Life lettering.</desc>
-  <rect width="512" height="512" rx="104" fill="#070807"/>
-  <rect x="28" y="28" width="456" height="456" rx="84" fill="#111210" stroke="#ff8a12" stroke-width="8"/>
-  <path d="M130 282c-31-31-51-55-51-92 0-39 27-68 65-68 23 0 43 12 55 31 12-19 32-31 55-31 38 0 65 29 65 68 0 37-20 61-51 92l-69 68-69-68Z" fill="none" stroke="#ff8a12" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M315 256h34l19-46 35 100 20-54h36" fill="none" stroke="#ff8a12" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="256" y="395" text-anchor="middle" fill="#ff8a12" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="900" letter-spacing="0">Health</text>
-  <text x="256" y="449" text-anchor="middle" fill="#f4f4f1" font-family="Inter, Arial, sans-serif" font-size="52" font-weight="900" letter-spacing="0">Life</text>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="180" y1="90" x2="860" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A2A2A"/>
+      <stop offset="0.55" stop-color="#151515"/>
+      <stop offset="1" stop-color="#050505"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="225" y1="244" x2="520" y2="795" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB020"/>
+      <stop offset="1" stop-color="#FF7A00"/>
+    </linearGradient>
+    <linearGradient id="white" x1="620" y1="250" x2="805" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E8E8E8"/>
+    </linearGradient>
+    <filter id="shadow" x="80" y="80" width="864" height="864" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- App icon background -->
+  <rect x="112" y="112" width="800" height="800" rx="180" fill="url(#bg)" filter="url(#shadow)"/>
+  <rect x="113.5" y="113.5" width="797" height="797" rx="178.5" stroke="#FFFFFF" stroke-opacity="0.09" stroke-width="3"/>
+
+  <!-- Balance circle -->
+  <path d="M506 760C370 748 264 638 264 512C264 386 370 276 506 264" stroke="url(#orange)" stroke-width="54" stroke-linecap="round"/>
+  <path d="M604 264C740 276 846 386 846 512C846 638 740 748 604 760" stroke="url(#white)" stroke-width="54" stroke-linecap="round"/>
+
+  <!-- Fork -->
+  <g fill="url(#orange)">
+    <rect x="421" y="320" width="34" height="186" rx="17"/>
+    <rect x="470" y="320" width="34" height="186" rx="17"/>
+    <rect x="519" y="320" width="34" height="186" rx="17"/>
+    <path d="M421 463C421 531 451 559 486 575C501 582 510 597 510 614V742C510 765 492 783 469 783C446 783 428 765 428 742V614C428 597 419 582 404 575C366 557 345 522 345 466V337C345 321 358 308 374 308C390 308 403 321 403 337V452C403 462 411 470 421 470V463Z"/>
+  </g>
+
+  <!-- Dumbbell -->
+  <g fill="url(#white)">
+    <rect x="674" y="457" width="54" height="164" rx="12"/>
+    <rect x="626" y="386" width="150" height="56" rx="22"/>
+    <rect x="626" y="582" width="150" height="56" rx="22"/>
+    <rect x="640" y="320" width="122" height="48" rx="20"/>
+    <rect x="640" y="656" width="122" height="48" rx="20"/>
+    <rect x="675" y="265" width="52" height="28" rx="14"/>
+    <rect x="675" y="731" width="52" height="28" rx="14"/>
+  </g>
 </svg>
