@@ -609,6 +609,7 @@ textarea {
   max-height: min(760px, calc(100vh - 36px));
   margin: 0 auto;
   overflow: auto;
+  overflow-x: hidden;
   padding: 20px;
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -689,15 +690,17 @@ textarea {
 }
 
 .chart-svg-wrap {
-  overflow-x: auto;
+  width: 100%;
+  overflow: hidden;
   border: 1px solid var(--line-soft);
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.24);
 }
 
 .progress-chart {
+  display: block;
   width: 100%;
-  min-width: 520px;
+  max-width: 100%;
   height: auto;
   color: var(--orange);
 }
