@@ -13,7 +13,7 @@
   <body>
     <div class="phone-shell">
       <header class="app-header">
-        <button class="icon-button" type="button" aria-label="Calendário" title="Calendário">
+        <button class="icon-button" id="openCalendar" type="button" aria-label="Calendário" title="Calendário">
           <span data-icon="calendar"></span>
         </button>
         <div class="header-title">
@@ -121,6 +121,25 @@
           <strong>Ajustes</strong>
         </button>
       </nav>
+    </div>
+
+    <div class="calendar-sheet" id="calendarSheet" aria-hidden="true">
+      <div class="calendar-backdrop" data-calendar-close></div>
+      <section class="calendar-panel" role="dialog" aria-modal="true" aria-labelledby="calendarTitle">
+        <div class="calendar-heading">
+          <p>Histórico</p>
+          <h2 id="calendarTitle">Escolher dia</h2>
+        </div>
+        <label class="calendar-field" for="historyDateInput">
+          <span>Data</span>
+          <input id="historyDateInput" type="date" />
+        </label>
+        <div class="calendar-actions">
+          <button class="secondary-button" id="goToday" type="button">Hoje</button>
+          <button class="secondary-button" data-calendar-close type="button">Cancelar</button>
+          <button class="primary-button" id="applyCalendarDate" type="button">Ver dia</button>
+        </div>
+      </section>
     </div>
 
     <script type="module" src="/app.js"></script>

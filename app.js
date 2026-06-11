@@ -136,22 +136,36 @@ const workouts = [
   })
 }));
 
-const today = new Date().toISOString().slice(0, 10);
+const today = formatDateToIso(new Date());
 const localKeys = {
   notes: "fitness:workout-notes",
-  checks: `fitness:daily-checks:${today}`,
-  workout: "fitness:selected-workout"
+  checks: (date) => `fitness:daily-checks:${date}`,
+  workout: "fitness:selected-workout",
+  workoutForDate: (date) => `fitness:selected-workout:${date}`
 };
 
 const supabaseClient = createSupabaseClient();
 let notesCache = {};
 let checksCache = {};
+let selectedDate = today;
 let currentWorkoutId = localStorage.getItem(localKeys.workout) || "treino-e";
 
 function parseTarget(target) {
   const match = target.match(/^(\d+)x(.+)$/i);
   if (!match) return { series: "-", reps: target };
   return { series: match[1], reps: match[2].trim() };
+}
+
+function formatDateToIso(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseIsoDate(date) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function createSupabaseClient() {
@@ -166,11 +180,13 @@ async function init() {
   renderDate();
   setSyncStatus("Carregando");
   notesCache = await loadNotes();
-  checksCache = await loadChecks();
+  currentWorkoutId = await loadWorkoutForDate(selectedDate);
+  checksCache = await loadChecks(selectedDate);
   renderMeals();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
   bindNavigation();
+  bindCalendar();
   setSyncStatus(supabaseClient ? "Supabase" : "Local");
 }
 
@@ -186,7 +202,8 @@ function renderDate() {
     day: "numeric",
     month: "long"
   });
-  document.getElementById("todayLabel").textContent = formatter.format(new Date());
+  const suffix = selectedDate === today ? "Hoje, " : "";
+  document.getElementById("todayLabel").textContent = `${suffix}${formatter.format(parseIsoDate(selectedDate))}`;
 }
 
 function setSyncStatus(text) {
@@ -206,13 +223,65 @@ function bindNavigation() {
 
   document.getElementById("resetMeals").addEventListener("click", async () => {
     checksCache = {};
-    localStorage.removeItem(localKeys.checks);
+    localStorage.removeItem(localKeys.checks(selectedDate));
     if (supabaseClient) {
-      await supabaseClient.from("daily_checks").delete().eq("profile_id", profileId).eq("check_date", today);
+      await supabaseClient.from("daily_checks").delete().eq("profile_id", profileId).eq("check_date", selectedDate);
     }
     renderMeals();
     renderWorkout(currentWorkoutId);
   });
+}
+
+function bindCalendar() {
+  const sheet = document.getElementById("calendarSheet");
+  const input = document.getElementById("historyDateInput");
+
+  document.getElementById("openCalendar").addEventListener("click", () => {
+    input.value = selectedDate;
+    sheet.classList.add("is-open");
+    sheet.setAttribute("aria-hidden", "false");
+    input.focus();
+  });
+
+  document.querySelectorAll("[data-calendar-close]").forEach((button) => {
+    button.addEventListener("click", () => closeCalendar());
+  });
+
+  document.getElementById("goToday").addEventListener("click", () => {
+    input.value = today;
+  });
+
+  document.getElementById("applyCalendarDate").addEventListener("click", async () => {
+    if (!input.value) return;
+    await selectDate(input.value);
+    closeCalendar();
+  });
+
+  input.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter" && input.value) {
+      await selectDate(input.value);
+      closeCalendar();
+    }
+    if (event.key === "Escape") closeCalendar();
+  });
+}
+
+function closeCalendar() {
+  const sheet = document.getElementById("calendarSheet");
+  sheet.classList.remove("is-open");
+  sheet.setAttribute("aria-hidden", "true");
+}
+
+async function selectDate(date) {
+  selectedDate = date;
+  setSyncStatus("Carregando");
+  renderDate();
+  currentWorkoutId = await loadWorkoutForDate(selectedDate);
+  checksCache = await loadChecks(selectedDate);
+  renderMeals();
+  renderWorkoutSelector();
+  renderWorkout(currentWorkoutId);
+  setSyncStatus(supabaseClient ? "Supabase" : "Local");
 }
 
 function renderMeals() {
@@ -239,12 +308,16 @@ function renderMeals() {
   `).join("");
   hydrateIcons(grid);
 
+  const dietDone = meals.filter((meal) => checksCache[meal.id]).length;
+  const workout = workouts.find((item) => item.id === currentWorkoutId) || workouts[0];
+  const workoutDone = workout.exercises.filter((exercise) => checksCache[exercise.id]).length;
+  const selectedDay = selectedDate === today ? "hoje" : selectedDate.split("-").reverse().join("/");
   document.getElementById("dailyTotal").innerHTML = `
     <span data-icon="flame"></span>
-    <div><strong>${meals.length}</strong><small>refeições</small></div>
-    <div><strong>130 g</strong><small>proteína base</small></div>
-    <div><strong>100 g</strong><small>carbo base</small></div>
-    <div><strong>2</strong><small>opções na janta</small></div>
+    <div><strong>${dietDone}/${meals.length}</strong><small>dieta</small></div>
+    <div><strong>${workoutDone}/${workout.exercises.length}</strong><small>treino</small></div>
+    <div><strong>${workout.short}</strong><small>tipo</small></div>
+    <div><strong>${selectedDay}</strong><small>dia</small></div>
   `;
   hydrateIcons(document.getElementById("dailyTotal"));
 
@@ -262,10 +335,14 @@ function renderWorkoutSelector() {
   document.querySelectorAll(".workout-select").forEach((select) => {
     select.innerHTML = workouts.map((workout) => `<option value="${workout.id}">${workout.label}</option>`).join("");
     select.value = currentWorkoutId;
+    if (select.dataset.bound === "true") return;
+    select.dataset.bound = "true";
     select.addEventListener("change", () => {
       currentWorkoutId = select.value;
       localStorage.setItem(localKeys.workout, currentWorkoutId);
+      saveWorkoutForDate(currentWorkoutId);
       renderWorkout(currentWorkoutId);
+      renderMeals();
     });
   });
 }
@@ -341,8 +418,10 @@ function bindWorkoutFields() {
     button.addEventListener("click", async () => {
       const id = button.dataset.exerciseDone;
       checksCache[id] = !checksCache[id];
+      await saveWorkoutForDate(currentWorkoutId);
       await saveCheck(id, checksCache[id]);
       renderWorkout(currentWorkoutId);
+      renderMeals();
     });
   });
 }
@@ -358,16 +437,29 @@ async function loadNotes() {
   return Object.fromEntries(data.map((item) => [item.exercise_id, item]));
 }
 
-async function loadChecks() {
-  const local = JSON.parse(localStorage.getItem(localKeys.checks) || "{}");
+async function loadChecks(date = selectedDate) {
+  const local = JSON.parse(localStorage.getItem(localKeys.checks(date)) || "{}");
   if (!supabaseClient) return local;
   const { data, error } = await supabaseClient
     .from("daily_checks")
     .select("item_id, completed")
     .eq("profile_id", profileId)
-    .eq("check_date", today);
+    .eq("check_date", date);
   if (error) return local;
   return Object.fromEntries(data.map((item) => [item.item_id, item.completed]));
+}
+
+async function loadWorkoutForDate(date = selectedDate) {
+  const fallback = localStorage.getItem(localKeys.workoutForDate(date)) || localStorage.getItem(localKeys.workout) || "treino-e";
+  if (!supabaseClient) return fallback;
+  const { data, error } = await supabaseClient
+    .from("daily_workouts")
+    .select("workout_id")
+    .eq("profile_id", profileId)
+    .eq("workout_date", date)
+    .maybeSingle();
+  if (error || !data?.workout_id) return fallback;
+  return data.workout_id;
 }
 
 async function saveExerciseField(exerciseId, field, value) {
@@ -390,13 +482,24 @@ async function saveExerciseField(exerciseId, field, value) {
 }
 
 async function saveCheck(itemId, completed) {
-  localStorage.setItem(localKeys.checks, JSON.stringify(checksCache));
+  localStorage.setItem(localKeys.checks(selectedDate), JSON.stringify(checksCache));
   if (!supabaseClient) return;
   await supabaseClient.from("daily_checks").upsert({
     profile_id: profileId,
-    check_date: today,
+    check_date: selectedDate,
     item_id: itemId,
     completed,
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function saveWorkoutForDate(workoutId) {
+  localStorage.setItem(localKeys.workoutForDate(selectedDate), workoutId);
+  if (!supabaseClient) return;
+  await supabaseClient.from("daily_workouts").upsert({
+    profile_id: profileId,
+    workout_date: selectedDate,
+    workout_id: workoutId,
     updated_at: new Date().toISOString()
   });
 }
