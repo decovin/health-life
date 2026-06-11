@@ -352,6 +352,18 @@ select {
   text-transform: uppercase;
 }
 
+.training-controls {
+  margin: 0 0 12px;
+}
+
+.training-controls label {
+  display: block;
+}
+
+.training-controls select {
+  width: min(100%, 420px);
+}
+
 .workout-meta {
   display: flex;
   flex-wrap: wrap;

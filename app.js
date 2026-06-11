@@ -259,21 +259,23 @@ function renderMeals() {
 }
 
 function renderWorkoutSelector() {
-  const select = document.getElementById("workoutSelect");
-  select.innerHTML = workouts.map((workout) => `<option value="${workout.id}">${workout.label}</option>`).join("");
-  select.value = currentWorkoutId;
-  select.addEventListener("change", () => {
-    currentWorkoutId = select.value;
-    localStorage.setItem(localKeys.workout, currentWorkoutId);
-    renderWorkout(currentWorkoutId);
+  document.querySelectorAll(".workout-select").forEach((select) => {
+    select.innerHTML = workouts.map((workout) => `<option value="${workout.id}">${workout.label}</option>`).join("");
+    select.value = currentWorkoutId;
+    select.addEventListener("change", () => {
+      currentWorkoutId = select.value;
+      localStorage.setItem(localKeys.workout, currentWorkoutId);
+      renderWorkout(currentWorkoutId);
+    });
   });
 }
 
 function renderWorkout(workoutId) {
   const workout = workouts.find((item) => item.id === workoutId) || workouts[0];
   currentWorkoutId = workout.id;
-  const selector = document.getElementById("workoutSelect");
-  if (selector) selector.value = workout.id;
+  document.querySelectorAll(".workout-select").forEach((selector) => {
+    selector.value = workout.id;
+  });
 
   document.getElementById("exerciseTable").innerHTML = workout.exercises.map((exercise, index) => {
     const saved = notesCache[exercise.id] || {};

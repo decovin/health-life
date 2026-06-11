@@ -37,7 +37,7 @@
           <div class="section-title workout-title">
             <span data-icon="dumbbell"></span>
             <h2>Treino do dia</h2>
-            <select id="workoutSelect" aria-label="Selecionar treino"></select>
+            <select class="workout-select" id="workoutSelect" aria-label="Selecionar treino"></select>
           </div>
           <div class="workout-table-wrap">
             <table class="workout-table">
@@ -60,6 +60,12 @@
           <div class="screen-heading">
             <p>Treino</p>
             <h2>Pesos e máquinas</h2>
+          </div>
+          <div class="training-controls">
+            <label for="trainingWorkoutSelect">
+              <span>Tipo de treino</span>
+              <select class="workout-select" id="trainingWorkoutSelect" aria-label="Selecionar tipo de treino"></select>
+            </label>
           </div>
           <div class="workout-meta" id="workoutMeta"></div>
           <div class="exercise-list" id="exerciseList"></div>
