@@ -3,80 +3,118 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#10251f" />
-    <title>Fitness Vinicius</title>
+    <meta name="theme-color" content="#070807" />
+    <title>Meu Plano</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="/config.js"></script>
   </head>
   <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Plano pessoal</p>
-          <h1>Fitness Vinicius</h1>
+    <div class="phone-shell">
+      <header class="app-header">
+        <button class="icon-button" type="button" aria-label="Calendário" title="Calendário">
+          <span data-icon="calendar"></span>
+        </button>
+        <div class="header-title">
+          <h1>Meu Plano</h1>
+          <p id="todayLabel">Hoje</p>
         </div>
-        <div class="sync-pill" id="syncStatus">Local</div>
+        <button class="icon-button" type="button" aria-label="Perfil" title="Perfil">
+          <span data-icon="user"></span>
+        </button>
       </header>
 
       <main>
-        <section class="today-band" id="home">
-          <div class="today-copy">
-            <p class="eyebrow">Dieta de hoje</p>
-            <h2>Resumo rápido das páginas finais</h2>
-          </div>
-          <div class="meal-strip" id="mealStrip"></div>
-        </section>
-
-        <nav class="tabs" aria-label="Seções do app">
-          <button class="tab is-active" data-view="diet">Dieta</button>
-          <button class="tab" data-view="training">Treino</button>
-          <button class="tab" data-view="files">Arquivos</button>
-        </nav>
-
-        <section class="view is-active" id="dietView">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Dieta</p>
-              <h2>Refeições resumidas</h2>
-            </div>
-            <button class="ghost-button" id="resetMeals">Limpar marcações</button>
+        <section class="view is-active" id="planView">
+          <div class="section-title">
+            <span data-icon="utensils"></span>
+            <h2>Dieta do dia</h2>
           </div>
           <div class="meal-grid" id="mealGrid"></div>
+          <article class="daily-total" id="dailyTotal"></article>
+
+          <div class="section-title workout-title">
+            <span data-icon="dumbbell"></span>
+            <h2>Treino do dia</h2>
+            <select id="workoutSelect" aria-label="Selecionar treino"></select>
+          </div>
+          <div class="workout-table-wrap">
+            <table class="workout-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Exercício</th>
+                  <th>Séries</th>
+                  <th>Reps</th>
+                  <th>Carga</th>
+                  <th>Máq.</th>
+                </tr>
+              </thead>
+              <tbody id="exerciseTable"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="view" id="trainingView">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Treino</p>
-              <h2>Pesos e máquinas</h2>
-            </div>
-            <select id="workoutSelect" aria-label="Selecionar treino"></select>
+          <div class="screen-heading">
+            <p>Treino</p>
+            <h2>Pesos e máquinas</h2>
           </div>
           <div class="workout-meta" id="workoutMeta"></div>
           <div class="exercise-list" id="exerciseList"></div>
         </section>
 
         <section class="view" id="filesView">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">PDFs originais</p>
-              <h2>Consulta completa</h2>
-            </div>
+          <div class="screen-heading">
+            <p>Arquivos</p>
+            <h2>PDFs originais</h2>
           </div>
           <div class="file-grid">
             <a class="file-card" href="/Arquivos/Dieta_Vinicius.pdf" target="_blank" rel="noreferrer">
-              <span>Dieta</span>
-              <strong>Dieta_Vinicius.pdf</strong>
+              <span data-icon="file"></span>
+              <strong>Dieta</strong>
+              <small>Dieta_Vinicius.pdf</small>
             </a>
             <a class="file-card" href="/Arquivos/Treino_vinicius.pdf" target="_blank" rel="noreferrer">
-              <span>Treino</span>
-              <strong>Treino_vinicius.pdf</strong>
+              <span data-icon="file"></span>
+              <strong>Treino</strong>
+              <small>Treino_vinicius.pdf</small>
             </a>
           </div>
         </section>
+
+        <section class="view" id="settingsView">
+          <div class="screen-heading">
+            <p>Ajustes</p>
+            <h2>Sincronização</h2>
+          </div>
+          <article class="settings-card">
+            <span>Status</span>
+            <strong id="syncStatus">Local</strong>
+          </article>
+          <button class="danger-button" id="resetMeals" type="button">Limpar marcações do dia</button>
+        </section>
       </main>
+
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        <button class="nav-item is-active" data-view="plan" type="button">
+          <span data-icon="home"></span>
+          <strong>Plano</strong>
+        </button>
+        <button class="nav-item" data-view="training" type="button">
+          <span data-icon="chart"></span>
+          <strong>Treino</strong>
+        </button>
+        <button class="nav-item" data-view="files" type="button">
+          <span data-icon="clipboard"></span>
+          <strong>Arquivos</strong>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <span data-icon="settings"></span>
+          <strong>Ajustes</strong>
+        </button>
+      </nav>
     </div>
 
     <script type="module" src="/app.js"></script>
