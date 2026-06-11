@@ -233,43 +233,27 @@ function bindNavigation() {
 }
 
 function bindCalendar() {
-  const sheet = document.getElementById("calendarSheet");
   const input = document.getElementById("historyDateInput");
 
   document.getElementById("openCalendar").addEventListener("click", () => {
     input.value = selectedDate;
-    sheet.classList.add("is-open");
-    sheet.setAttribute("aria-hidden", "false");
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
     input.focus();
+    input.click();
   });
 
-  document.querySelectorAll("[data-calendar-close]").forEach((button) => {
-    button.addEventListener("click", () => closeCalendar());
-  });
-
-  document.getElementById("goToday").addEventListener("click", () => {
-    input.value = today;
-  });
-
-  document.getElementById("applyCalendarDate").addEventListener("click", async () => {
-    if (!input.value) return;
-    await selectDate(input.value);
-    closeCalendar();
+  input.addEventListener("change", async () => {
+    if (input.value) await selectDate(input.value);
   });
 
   input.addEventListener("keydown", async (event) => {
     if (event.key === "Enter" && input.value) {
       await selectDate(input.value);
-      closeCalendar();
     }
-    if (event.key === "Escape") closeCalendar();
   });
-}
-
-function closeCalendar() {
-  const sheet = document.getElementById("calendarSheet");
-  sheet.classList.remove("is-open");
-  sheet.setAttribute("aria-hidden", "true");
 }
 
 async function selectDate(date) {
