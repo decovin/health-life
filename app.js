@@ -306,10 +306,9 @@ function renderWorkout(workoutId) {
             <h3>${exercise.name}</h3>
             <p>${exercise.target}</p>
           </div>
-          <label class="done-control">
-            <input type="checkbox" data-exercise-done="${exercise.id}" ${checksCache[exercise.id] ? "checked" : ""} />
-            <span>Feito</span>
-          </label>
+          <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
+            ${checksCache[exercise.id] ? "Feito" : "Não feito"}
+          </button>
         </div>
         <div class="exercise-fields">
           <label>
@@ -338,10 +337,12 @@ function bindWorkoutFields() {
     field.addEventListener("blur", () => saveExerciseField(field.dataset.note, field.dataset.field, field.value));
   });
 
-  document.querySelectorAll("[data-exercise-done]").forEach((checkbox) => {
-    checkbox.addEventListener("change", async () => {
-      checksCache[checkbox.dataset.exerciseDone] = checkbox.checked;
-      await saveCheck(checkbox.dataset.exerciseDone, checkbox.checked);
+  document.querySelectorAll("[data-exercise-done]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.exerciseDone;
+      checksCache[id] = !checksCache[id];
+      await saveCheck(id, checksCache[id]);
+      renderWorkout(currentWorkoutId);
     });
   });
 }

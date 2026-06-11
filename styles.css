@@ -426,19 +426,23 @@ select {
   color: var(--muted);
 }
 
-.done-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  color: var(--orange);
+.done-button {
+  flex: 0 0 auto;
+  min-width: 112px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.055);
+  cursor: pointer;
   font-weight: 900;
 }
 
-.done-control input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--orange);
+.done-button.is-done {
+  border-color: rgba(255, 138, 18, 0.62);
+  color: var(--orange);
+  background: var(--orange-soft);
 }
 
 .exercise-fields {
