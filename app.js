@@ -208,6 +208,8 @@ function renderDate() {
   });
   const suffix = selectedDate === today ? "Hoje, " : "";
   document.getElementById("todayLabel").textContent = `${suffix}${formatter.format(parseIsoDate(selectedDate))}`;
+  const input = document.getElementById("historyDateInput");
+  if (input) input.value = selectedDate;
 }
 
 function setSyncStatus(text) {
@@ -238,6 +240,7 @@ function bindNavigation() {
 
 function bindCalendar() {
   const input = document.getElementById("historyDateInput");
+  input.value = selectedDate;
 
   document.getElementById("openCalendar").addEventListener("click", () => {
     input.value = selectedDate;
