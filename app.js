@@ -165,7 +165,7 @@ const leticiaMeals = [
   {
     id: "janta",
     icon: "moon",
-    time: "19:00/20:00",
+    time: "19:00",
     title: "Janta",
     summary: "Rap 10 com proteína ou hambúrguer",
     detail: "Rap 10 ou pão de hambúrguer",
@@ -312,7 +312,19 @@ function createSupabaseClient() {
   const url = window.FITNESS_CONFIG?.SUPABASE_URL;
   const key = window.FITNESS_CONFIG?.SUPABASE_ANON_KEY;
   if (!url || !key || !window.supabase) return null;
-  return window.supabase.createClient(url, key);
+  return window.supabase.createClient(normalizeSupabaseUrl(url), key);
+}
+
+function normalizeSupabaseUrl(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.pathname = parsed.pathname.replace(/\/rest\/v1\/?$/, "");
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return url;
+  }
 }
 
 async function init() {
@@ -366,10 +378,11 @@ function bindNavigation() {
   });
 
   document.getElementById("switchProfile").addEventListener("click", () => {
-    localStorage.removeItem(localKeys.activeProfile);
-    activeProfileId = "";
-    activeProfile = null;
-    showProfileSelector();
+    resetToProfileSelector();
+  });
+
+  document.getElementById("openProfileSelector").addEventListener("click", () => {
+    resetToProfileSelector();
   });
 
   document.getElementById("resetMeals").addEventListener("click", async () => {
@@ -422,6 +435,13 @@ function showProfileSelector() {
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
   document.querySelectorAll(".nav-item").forEach((tab) => tab.classList.remove("is-active"));
   document.getElementById("profileView").classList.add("is-active");
+}
+
+function resetToProfileSelector() {
+  localStorage.removeItem(localKeys.activeProfile);
+  activeProfileId = "";
+  activeProfile = null;
+  showProfileSelector();
 }
 
 function showMainView(viewName) {

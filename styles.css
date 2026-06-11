@@ -385,6 +385,8 @@ select {
 }
 
 .profile-card {
+  display: flex;
+  align-items: center;
   min-height: 180px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -400,16 +402,9 @@ select {
 
 .profile-card strong {
   display: block;
-  margin-bottom: 10px;
   color: var(--orange);
   font-size: clamp(28px, 6vw, 42px);
   line-height: 1;
-}
-
-.profile-card span {
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 800;
 }
 
 .is-profile-selecting .bottom-nav {
