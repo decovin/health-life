@@ -143,10 +143,12 @@ const localKeys = {
   workout: "fitness:selected-workout",
   workoutForDate: (date) => `fitness:selected-workout:${date}`
 };
+const dailyLogPrefix = "fitness:daily-exercise-logs:";
 
 const supabaseClient = createSupabaseClient();
 let notesCache = {};
 let checksCache = {};
+let dailyLogsCache = {};
 let selectedDate = today;
 let currentWorkoutId = localStorage.getItem(localKeys.workout) || "treino-e";
 
@@ -182,11 +184,13 @@ async function init() {
   notesCache = await loadNotes();
   currentWorkoutId = await loadWorkoutForDate(selectedDate);
   checksCache = await loadChecks(selectedDate);
+  dailyLogsCache = await loadDailyLogs(selectedDate);
   renderMeals();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
   bindNavigation();
   bindCalendar();
+  bindChartModal();
   setSyncStatus(supabaseClient ? "Supabase" : "Local");
 }
 
@@ -262,6 +266,7 @@ async function selectDate(date) {
   renderDate();
   currentWorkoutId = await loadWorkoutForDate(selectedDate);
   checksCache = await loadChecks(selectedDate);
+  dailyLogsCache = await loadDailyLogs(selectedDate);
   renderMeals();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
@@ -340,13 +345,14 @@ function renderWorkout(workoutId) {
 
   document.getElementById("exerciseTable").innerHTML = workout.exercises.map((exercise, index) => {
     const saved = notesCache[exercise.id] || {};
+    const daily = dailyLogsCache[exercise.id] || {};
     return `
       <tr>
         <td>${index + 1}</td>
         <td>${exercise.name}</td>
         <td>${exercise.series}</td>
         <td>${exercise.reps}</td>
-        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${saved.weight || ""}" placeholder="--" /></td>
+        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${daily.weight || ""}" placeholder="--" /></td>
         <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${saved.machine || ""}" placeholder="--" /></td>
       </tr>
     `;
@@ -360,6 +366,7 @@ function renderWorkout(workoutId) {
 
   document.getElementById("exerciseList").innerHTML = workout.exercises.map((exercise) => {
     const saved = notesCache[exercise.id] || {};
+    const daily = dailyLogsCache[exercise.id] || {};
     return `
       <article class="exercise-card">
         <div class="exercise-title">
@@ -367,14 +374,19 @@ function renderWorkout(workoutId) {
             <h3>${exercise.name}</h3>
             <p>${exercise.target}</p>
           </div>
-          <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
-            ${checksCache[exercise.id] ? "Feito" : "Não feito"}
-          </button>
+          <div class="exercise-actions">
+            <button class="chart-button" type="button" data-chart-exercise="${exercise.id}" aria-label="Ver evolução de ${exercise.name}" title="Ver evolução">
+              <span data-icon="chart"></span>
+            </button>
+            <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
+              ${checksCache[exercise.id] ? "Feito" : "Não feito"}
+            </button>
+          </div>
         </div>
         <div class="exercise-fields">
           <label>
             <span>Peso</span>
-            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${saved.weight || ""}" placeholder="kg" />
+            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${daily.weight || ""}" placeholder="kg" />
           </label>
           <label>
             <span>Máquina</span>
@@ -390,6 +402,7 @@ function renderWorkout(workoutId) {
   }).join("");
 
   bindWorkoutFields();
+  hydrateIcons(document.getElementById("exerciseList"));
 }
 
 function bindWorkoutFields() {
@@ -407,6 +420,22 @@ function bindWorkoutFields() {
       renderWorkout(currentWorkoutId);
       renderMeals();
     });
+  });
+
+  document.querySelectorAll("[data-chart-exercise]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openExerciseChart(button.dataset.chartExercise);
+    });
+  });
+}
+
+function bindChartModal() {
+  document.querySelectorAll("[data-chart-close]").forEach((button) => {
+    button.addEventListener("click", closeExerciseChart);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeExerciseChart();
   });
 }
 
@@ -446,7 +475,24 @@ async function loadWorkoutForDate(date = selectedDate) {
   return data.workout_id;
 }
 
+async function loadDailyLogs(date = selectedDate) {
+  const local = JSON.parse(localStorage.getItem(`${dailyLogPrefix}${date}`) || "{}");
+  if (!supabaseClient) return local;
+  const { data, error } = await supabaseClient
+    .from("daily_exercise_logs")
+    .select("exercise_id, weight")
+    .eq("profile_id", profileId)
+    .eq("log_date", date);
+  if (error) return local;
+  return Object.fromEntries(data.map((item) => [item.exercise_id, { weight: item.weight || "" }]));
+}
+
 async function saveExerciseField(exerciseId, field, value) {
+  if (field === "weight") {
+    await saveDailyExerciseWeight(exerciseId, value);
+    return;
+  }
+
   notesCache[exerciseId] = { ...(notesCache[exerciseId] || {}), [field]: value };
   localStorage.setItem(localKeys.notes, JSON.stringify(notesCache));
 
@@ -461,6 +507,25 @@ async function saveExerciseField(exerciseId, field, value) {
     weight: notesCache[exerciseId].weight || "",
     machine: notesCache[exerciseId].machine || "",
     notes: notesCache[exerciseId].notes || "",
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function saveDailyExerciseWeight(exerciseId, weight) {
+  dailyLogsCache[exerciseId] = { ...(dailyLogsCache[exerciseId] || {}), weight };
+  localStorage.setItem(`${dailyLogPrefix}${selectedDate}`, JSON.stringify(dailyLogsCache));
+  await saveWorkoutForDate(currentWorkoutId);
+
+  document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
+    if (input.value !== weight) input.value = weight;
+  });
+
+  if (!supabaseClient) return;
+  await supabaseClient.from("daily_exercise_logs").upsert({
+    profile_id: profileId,
+    log_date: selectedDate,
+    exercise_id: exerciseId,
+    weight,
     updated_at: new Date().toISOString()
   });
 }
@@ -486,6 +551,125 @@ async function saveWorkoutForDate(workoutId) {
     workout_id: workoutId,
     updated_at: new Date().toISOString()
   });
+}
+
+async function openExerciseChart(exerciseId) {
+  const exercise = findExercise(exerciseId);
+  if (!exercise) return;
+
+  const modal = document.getElementById("chartModal");
+  document.getElementById("chartTitle").textContent = exercise.name;
+  document.getElementById("chartBody").innerHTML = `<p class="chart-empty">Carregando evolução...</p>`;
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+
+  const history = await loadExerciseHistory(exerciseId);
+  document.getElementById("chartBody").innerHTML = renderChart(history);
+}
+
+function closeExerciseChart() {
+  const modal = document.getElementById("chartModal");
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function findExercise(exerciseId) {
+  return workouts.flatMap((workout) => workout.exercises).find((exercise) => exercise.id === exerciseId);
+}
+
+async function loadExerciseHistory(exerciseId) {
+  const localHistory = loadLocalExerciseHistory(exerciseId);
+  if (!supabaseClient) return localHistory;
+
+  const { data, error } = await supabaseClient
+    .from("daily_exercise_logs")
+    .select("log_date, weight")
+    .eq("profile_id", profileId)
+    .eq("exercise_id", exerciseId)
+    .order("log_date", { ascending: true });
+
+  if (error) return localHistory;
+  return data
+    .map((item) => ({ date: item.log_date, weight: normalizeWeight(item.weight) }))
+    .filter((item) => Number.isFinite(item.weight));
+}
+
+function loadLocalExerciseHistory(exerciseId) {
+  return Object.keys(localStorage)
+    .filter((key) => key.startsWith(dailyLogPrefix))
+    .map((key) => {
+      const date = key.replace(dailyLogPrefix, "");
+      const logs = JSON.parse(localStorage.getItem(key) || "{}");
+      return { date, weight: normalizeWeight(logs[exerciseId]?.weight) };
+    })
+    .filter((item) => Number.isFinite(item.weight))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function normalizeWeight(value) {
+  if (!value) return NaN;
+  return Number(String(value).replace(",", ".").replace(/[^\d.]/g, ""));
+}
+
+function renderChart(history) {
+  if (!history.length) {
+    return `<p class="chart-empty">Ainda não existe carga registrada para este exercício.</p>`;
+  }
+
+  const width = 640;
+  const height = 300;
+  const padding = 42;
+  const weights = history.map((item) => item.weight);
+  const min = Math.min(...weights);
+  const max = Math.max(...weights);
+  const range = Math.max(max - min, 1);
+  const points = history.map((item, index) => {
+    const x = history.length === 1 ? width / 2 : padding + (index * (width - padding * 2)) / (history.length - 1);
+    const y = height - padding - ((item.weight - min) / range) * (height - padding * 2);
+    return { ...item, x, y };
+  });
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const first = history[0];
+  const last = history[history.length - 1];
+  const delta = last.weight - first.weight;
+  const deltaText = `${delta >= 0 ? "+" : ""}${formatWeight(delta)} kg`;
+
+  return `
+    <div class="chart-stats">
+      <div><strong>${formatWeight(last.weight)} kg</strong><span>última carga</span></div>
+      <div><strong>${formatWeight(max)} kg</strong><span>maior carga</span></div>
+      <div><strong>${deltaText}</strong><span>evolução</span></div>
+    </div>
+    <div class="chart-svg-wrap">
+      <svg class="progress-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Gráfico de evolução de carga">
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" />
+        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" />
+        <polyline points="${polyline}" />
+        ${points.map((point) => `
+          <g>
+            <circle cx="${point.x}" cy="${point.y}" r="7" />
+            <text x="${point.x}" y="${point.y - 14}" text-anchor="middle">${formatWeight(point.weight)}</text>
+          </g>
+        `).join("")}
+      </svg>
+    </div>
+    <div class="history-list">
+      ${history.map((item) => `
+        <div>
+          <span>${formatDisplayDate(item.date)}</span>
+          <strong>${formatWeight(item.weight)} kg</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function formatWeight(value) {
+  return Number(value.toFixed(1)).toLocaleString("pt-BR");
+}
+
+function formatDisplayDate(date) {
+  return date.split("-").reverse().join("/");
 }
 
 init();

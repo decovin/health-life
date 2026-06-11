@@ -124,6 +124,20 @@
       </nav>
     </div>
 
+    <div class="chart-modal" id="chartModal" aria-hidden="true">
+      <div class="chart-backdrop" data-chart-close></div>
+      <section class="chart-panel" role="dialog" aria-modal="true" aria-labelledby="chartTitle">
+        <div class="chart-heading">
+          <div>
+            <p>Evolução de carga</p>
+            <h2 id="chartTitle">Exercício</h2>
+          </div>
+          <button class="chart-close" data-chart-close type="button" aria-label="Fechar gráfico">&times;</button>
+        </div>
+        <div class="chart-body" id="chartBody"></div>
+      </section>
+    </div>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>

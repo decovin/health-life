@@ -426,6 +426,13 @@ select {
   gap: 12px;
 }
 
+.exercise-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
 .exercise-title h3 {
   margin: 0 0 5px;
   font-size: 19px;
@@ -453,6 +460,23 @@ select {
   border-color: rgba(255, 138, 18, 0.62);
   color: var(--orange);
   background: var(--orange-soft);
+}
+
+.chart-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--orange);
+  background: rgba(255, 255, 255, 0.055);
+  cursor: pointer;
+}
+
+.chart-button span {
+  width: 22px;
+  height: 22px;
 }
 
 .exercise-fields {
@@ -556,6 +580,179 @@ textarea {
   border-top: 1px solid var(--line-soft);
   background: rgba(7, 8, 7, 0.9);
   backdrop-filter: blur(18px);
+}
+
+.chart-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: none;
+}
+
+.chart-modal.is-open {
+  display: block;
+}
+
+.chart-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.chart-panel {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  max-width: 760px;
+  max-height: min(760px, calc(100vh - 36px));
+  margin: 0 auto;
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
+    #111210;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.62);
+}
+
+.chart-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chart-heading p {
+  margin: 0 0 4px;
+  color: var(--orange);
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.chart-heading h2 {
+  margin: 0;
+  font-size: clamp(24px, 5vw, 34px);
+  line-height: 1.1;
+}
+
+.chart-close {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.chart-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.chart-stats div,
+.history-list div {
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.chart-stats div {
+  padding: 12px;
+}
+
+.chart-stats strong {
+  display: block;
+  color: var(--orange);
+  font-size: 22px;
+}
+
+.chart-stats span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.chart-svg-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.progress-chart {
+  width: 100%;
+  min-width: 520px;
+  height: auto;
+  color: var(--orange);
+}
+
+.progress-chart line {
+  stroke: rgba(255, 255, 255, 0.16);
+}
+
+.progress-chart polyline {
+  fill: none;
+  stroke: var(--orange);
+  stroke-width: 4;
+}
+
+.progress-chart circle {
+  fill: #111210;
+  stroke: var(--orange);
+  stroke-width: 4;
+}
+
+.progress-chart text {
+  fill: var(--text);
+  stroke: none;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.history-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.history-list span {
+  color: var(--muted);
+}
+
+.history-list strong {
+  color: var(--orange);
+}
+
+.chart-empty {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .nav-item {
@@ -712,6 +909,30 @@ textarea {
   .exercise-list,
   .file-grid {
     grid-template-columns: 1fr;
+  }
+
+  .exercise-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .exercise-actions {
+    width: 100%;
+  }
+
+  .done-button {
+    flex: 1;
+  }
+
+  .chart-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-panel {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    padding: 16px;
   }
 
   .bottom-nav {

@@ -25,9 +25,19 @@ create table if not exists public.daily_workouts (
   primary key (profile_id, workout_date)
 );
 
+create table if not exists public.daily_exercise_logs (
+  profile_id text not null,
+  log_date date not null,
+  exercise_id text not null,
+  weight text default '',
+  updated_at timestamptz default now(),
+  primary key (profile_id, log_date, exercise_id)
+);
+
 alter table public.workout_exercise_notes enable row level security;
 alter table public.daily_checks enable row level security;
 alter table public.daily_workouts enable row level security;
+alter table public.daily_exercise_logs enable row level security;
 
 create policy "Allow anon exercise note access"
 on public.workout_exercise_notes
@@ -45,6 +55,13 @@ with check (true);
 
 create policy "Allow anon daily workout access"
 on public.daily_workouts
+for all
+to anon
+using (true)
+with check (true);
+
+create policy "Allow anon daily exercise log access"
+on public.daily_exercise_logs
 for all
 to anon
 using (true)
