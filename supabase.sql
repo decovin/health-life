@@ -39,6 +39,7 @@ alter table public.daily_checks enable row level security;
 alter table public.daily_workouts enable row level security;
 alter table public.daily_exercise_logs enable row level security;
 
+drop policy if exists "Allow anon exercise note access" on public.workout_exercise_notes;
 create policy "Allow anon exercise note access"
 on public.workout_exercise_notes
 for all
@@ -46,6 +47,7 @@ to anon
 using (true)
 with check (true);
 
+drop policy if exists "Allow anon daily check access" on public.daily_checks;
 create policy "Allow anon daily check access"
 on public.daily_checks
 for all
@@ -53,6 +55,7 @@ to anon
 using (true)
 with check (true);
 
+drop policy if exists "Allow anon daily workout access" on public.daily_workouts;
 create policy "Allow anon daily workout access"
 on public.daily_workouts
 for all
@@ -60,9 +63,15 @@ to anon
 using (true)
 with check (true);
 
+drop policy if exists "Allow anon daily exercise log access" on public.daily_exercise_logs;
 create policy "Allow anon daily exercise log access"
 on public.daily_exercise_logs
 for all
 to anon
 using (true)
 with check (true);
+
+grant select, insert, update, delete on public.workout_exercise_notes to anon;
+grant select, insert, update, delete on public.daily_checks to anon;
+grant select, insert, update, delete on public.daily_workouts to anon;
+grant select, insert, update, delete on public.daily_exercise_logs to anon;

@@ -1,5 +1,3 @@
-const profileId = window.FITNESS_CONFIG?.PROFILE_ID || "vinicius";
-
 const icons = {
   apple: '<svg viewBox="0 0 24 24"><path d="M12 6c1.7-2.6 4.2-2.9 5.5-2.5-.1 1.7-.9 3.1-2.2 4.1"/><path d="M12.2 7.6c1.1-.7 2.5-.8 3.8-.3 2.9 1.1 3.4 5.1 1.2 9-1.2 2.2-2.4 3.7-3.8 3.7-.9 0-1.3-.5-2.5-.5s-1.7.5-2.6.5c-1.4 0-2.6-1.5-3.8-3.7-2.1-3.9-1.7-7.8 1.2-9 1.3-.5 2.7-.4 3.8.3.7.4 1.9.4 2.7 0Z"/></svg>',
   bowl: '<svg viewBox="0 0 24 24"><path d="M4 12h16c-.4 4.5-3.6 7-8 7s-7.6-2.5-8-7Z"/><path d="M3 12h18"/><path d="M7 10c0-1.5 1.5-2.3 3-2.3s3 .8 3 2.3"/><path d="M11 8c.5-1.8 2.1-2.7 4-2.2"/></svg>',
@@ -17,7 +15,7 @@ const icons = {
   utensils: '<svg viewBox="0 0 24 24"><path d="M6 2v8M3 2v8c0 2 1.3 3 3 3s3-1 3-3V2M6 13v9"/><path d="M17 2v20M17 2c3 2.6 4 5.4 4 9h-4"/></svg>'
 };
 
-const meals = [
+const viniciusMeals = [
   {
     id: "desjejum",
     icon: "sun",
@@ -65,7 +63,7 @@ const meals = [
   }
 ];
 
-const workouts = [
+const viniciusWorkouts = [
   {
     id: "treino-a",
     label: "Peito, Ombro e Tríceps",
@@ -136,21 +134,161 @@ const workouts = [
   })
 }));
 
+const leticiaMeals = [
+  {
+    id: "desjejum",
+    icon: "sun",
+    time: "Manhã",
+    title: "Desjejum",
+    summary: "Iogurte grego zero, chia e Yakult Light",
+    detail: "Iogurte, chia e Yakult",
+    items: ["1 iogurte grego zero", "5 g de chia", "1 Yakult Light"]
+  },
+  {
+    id: "almoco",
+    icon: "bowl",
+    time: "13:00",
+    title: "Almoço",
+    summary: "Proteína, carboidrato, folhas e azeite",
+    detail: "100 g proteína, 60 g carbo, folhas e azeite",
+    items: ["100 g de frango, tilápia, picanha suína ou carne bovina", "60 g de arroz branco, batata ou mandioca", "Folhas verdes", "1 colher de azeite extra virgem"]
+  },
+  {
+    id: "cafe-tarde",
+    icon: "utensils",
+    time: "16:00",
+    title: "Café da tarde",
+    summary: "Pão integral, muçarela e castanhas",
+    detail: "Pão, queijo e castanhas",
+    items: ["1 fatia de pão integral", "20 g de queijo muçarela", "2 castanhas do Pará"]
+  },
+  {
+    id: "janta",
+    icon: "moon",
+    time: "19:00/20:00",
+    title: "Janta",
+    summary: "Rap 10 com proteína ou hambúrguer",
+    detail: "Rap 10 ou pão de hambúrguer",
+    items: ["Opção 1: 1 Rap 10 integral, 40 g de frango desfiado ou atum, 10 g de creme de ricota", "Opção 2: 1 pão de hambúrguer com 60 g de carne bovina"]
+  }
+];
+
+const leticiaWorkouts = [
+  {
+    id: "treino-a",
+    label: "Glúteos e Quadríceps",
+    short: "Treino A",
+    note: "Cardio se possível: 30 minutos.",
+    exercises: [
+      ["leg-press-45", "Leg Press 45°", "3x12"],
+      ["agachamento-livre", "Agachamento Livre", "3x12"],
+      ["cadeira-extensora", "Cadeira Extensora", "3x15"],
+      ["afundo-halteres", "Afundo com halteres", "3x10 cada perna"],
+      ["cadeira-abdutora", "Cadeira Abdutora", "3x15"],
+      ["elevacao-pelvica", "Elevação Pélvica", "3x12"],
+      ["panturrilha-em-pe", "Panturrilha em pé", "3x20"],
+      ["prancha", "Prancha", "3x30 segundos"]
+    ]
+  },
+  {
+    id: "treino-b",
+    label: "Cardio",
+    short: "Treino B",
+    note: "45 a 60 minutos.",
+    exercises: [["cardio-b", "Cárdio", "45 a 60 min"]]
+  },
+  {
+    id: "treino-c",
+    label: "Superior",
+    short: "Treino C",
+    note: "",
+    exercises: [
+      ["puxada-frontal", "Puxada frontal", "3x12"],
+      ["remada-baixa", "Remada baixa", "3x12"],
+      ["supino-maquina", "Supino máquina", "3x12"],
+      ["desenvolvimento-maquina", "Desenvolvimento máquina", "3x12"],
+      ["elevacao-lateral", "Elevação lateral", "3x15"],
+      ["triceps-corda", "Tríceps corda", "3x15"],
+      ["rosca-direta", "Rosca direta", "3x12"],
+      ["abdominal-crunch", "Abdominal Crunch", "3x20"]
+    ]
+  },
+  {
+    id: "treino-d",
+    label: "Cardio",
+    short: "Treino D",
+    note: "45 a 60 minutos.",
+    exercises: [["cardio-d", "Cárdio", "45 a 60 min"]]
+  },
+  {
+    id: "treino-e",
+    label: "Glúteos, Posterior e Core",
+    short: "Treino E",
+    note: "",
+    exercises: [
+      ["stiff-halteres", "Stiff com halteres", "3x12"],
+      ["mesa-flexora", "Mesa Flexora", "3x15"],
+      ["cadeira-flexora", "Cadeira Flexora", "3x15"],
+      ["elevacao-pelvica", "Elevação Pélvica", "3x12"],
+      ["abducao-quadril-maquina", "Abdução de quadril máquina", "3x15"],
+      ["step-up-banco", "Step-up no banco", "3x10 cada perna"],
+      ["prancha-lateral", "Prancha lateral", "3x30 segundos"]
+    ]
+  }
+].map((workout) => ({
+  ...workout,
+  exercises: workout.exercises.map(([id, name, target]) => {
+    const parsed = parseTarget(target);
+    return { id, name, target, ...parsed };
+  })
+}));
+
+const profiles = {
+  vinicius: {
+    id: "vinicius",
+    name: "Vinicius",
+    defaultWorkout: "treino-e",
+    meals: viniciusMeals,
+    workouts: viniciusWorkouts,
+    files: [
+      { label: "Dieta", name: "Dieta_Vinicius.pdf", href: "/Arquivos/Dieta_Vinicius.pdf" },
+      { label: "Treino", name: "Treino_vinicius.pdf", href: "/Arquivos/Treino_vinicius.pdf" }
+    ]
+  },
+  leticia: {
+    id: "leticia",
+    name: "Letícia",
+    defaultWorkout: "treino-a",
+    meals: leticiaMeals,
+    workouts: leticiaWorkouts,
+    files: [
+      { label: "Dieta", name: "Dieta_leticia.pdf", href: "/Arquivos/Dieta_leticia.pdf" },
+      { label: "Treino", name: "Treino_Leticia.pdf", href: "/Arquivos/Treino_Leticia.pdf" }
+    ]
+  }
+};
+
 const today = formatDateToIso(new Date());
 const localKeys = {
-  notes: "fitness:workout-notes",
-  checks: (date) => `fitness:daily-checks:${date}`,
-  workout: "fitness:selected-workout",
-  workoutForDate: (date) => `fitness:selected-workout:${date}`
+  activeProfile: "fitness:active-profile",
+  notes: (profileId) => `fitness:${profileId}:workout-notes`,
+  checks: (profileId, date) => `fitness:${profileId}:daily-checks:${date}`,
+  workout: (profileId) => `fitness:${profileId}:selected-workout`,
+  workoutForDate: (profileId, date) => `fitness:${profileId}:selected-workout:${date}`
 };
-const dailyLogPrefix = "fitness:daily-exercise-logs:";
+const dailyLogPrefix = (profileId) => `fitness:${profileId}:daily-exercise-logs:`;
 
 const supabaseClient = createSupabaseClient();
+let activeProfileId = "";
+let activeProfile = null;
+let profileId = activeProfile?.id || "vinicius";
+let meals = activeProfile?.meals || [];
+let workouts = activeProfile?.workouts || [];
 let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
 let selectedDate = today;
-let currentWorkoutId = localStorage.getItem(localKeys.workout) || "treino-e";
+let currentWorkoutId = activeProfile ? localStorage.getItem(localKeys.workout(profileId)) || activeProfile.defaultWorkout : "treino-e";
 
 function parseTarget(target) {
   const match = target.match(/^(\d+)x(.+)$/i);
@@ -180,18 +318,19 @@ function createSupabaseClient() {
 async function init() {
   hydrateIcons();
   renderDate();
-  setSyncStatus("Carregando");
-  notesCache = await loadNotes();
-  currentWorkoutId = await loadWorkoutForDate(selectedDate);
-  checksCache = await loadChecks(selectedDate);
-  dailyLogsCache = await loadDailyLogs(selectedDate);
-  renderMeals();
-  renderWorkoutSelector();
-  renderWorkout(currentWorkoutId);
   bindNavigation();
   bindCalendar();
   bindChartModal();
-  setSyncStatus(supabaseClient ? "Supabase" : "Local");
+  bindProfileSelection();
+
+  if (!activeProfile) {
+    showProfileSelector();
+    setSyncStatus(supabaseClient ? "Supabase" : "Local");
+    return;
+  }
+
+  await loadActiveProfile();
+  showMainView("plan");
 }
 
 function hydrateIcons(root = document) {
@@ -220,23 +359,76 @@ function setSyncStatus(text) {
 function bindNavigation() {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach((tab) => tab.classList.remove("is-active"));
-      document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
-      button.classList.add("is-active");
-      document.getElementById(`${button.dataset.view}View`).classList.add("is-active");
+      if (!activeProfile) return;
+      showMainView(button.dataset.view);
       if (button.dataset.view === "training") renderWorkout(currentWorkoutId);
     });
   });
 
+  document.getElementById("switchProfile").addEventListener("click", () => {
+    localStorage.removeItem(localKeys.activeProfile);
+    activeProfileId = "";
+    activeProfile = null;
+    showProfileSelector();
+  });
+
   document.getElementById("resetMeals").addEventListener("click", async () => {
     checksCache = {};
-    localStorage.removeItem(localKeys.checks(selectedDate));
+    localStorage.removeItem(localKeys.checks(profileId, selectedDate));
     if (supabaseClient) {
       await supabaseClient.from("daily_checks").delete().eq("profile_id", profileId).eq("check_date", selectedDate);
     }
     renderMeals();
     renderWorkout(currentWorkoutId);
   });
+}
+
+function bindProfileSelection() {
+  document.querySelectorAll("[data-profile-select]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await activateProfile(button.dataset.profileSelect);
+      showMainView("plan");
+    });
+  });
+}
+
+async function activateProfile(profileKey) {
+  activeProfile = profiles[profileKey] || profiles.vinicius;
+  activeProfileId = activeProfile.id;
+  profileId = activeProfile.id;
+  meals = activeProfile.meals;
+  workouts = activeProfile.workouts;
+  localStorage.setItem(localKeys.activeProfile, profileId);
+  currentWorkoutId = localStorage.getItem(localKeys.workout(profileId)) || activeProfile.defaultWorkout;
+  await loadActiveProfile();
+}
+
+async function loadActiveProfile() {
+  setSyncStatus("Carregando");
+  notesCache = await loadNotes();
+  currentWorkoutId = await loadWorkoutForDate(selectedDate);
+  checksCache = await loadChecks(selectedDate);
+  dailyLogsCache = await loadDailyLogs(selectedDate);
+  renderDate();
+  renderMeals();
+  renderWorkoutSelector();
+  renderWorkout(currentWorkoutId);
+  renderFiles();
+  setSyncStatus(supabaseClient ? "Supabase" : "Local");
+}
+
+function showProfileSelector() {
+  document.body.classList.add("is-profile-selecting");
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
+  document.querySelectorAll(".nav-item").forEach((tab) => tab.classList.remove("is-active"));
+  document.getElementById("profileView").classList.add("is-active");
+}
+
+function showMainView(viewName) {
+  document.body.classList.remove("is-profile-selecting");
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
+  document.querySelectorAll(".nav-item").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === viewName));
+  document.getElementById(`${viewName}View`).classList.add("is-active");
 }
 
 function bindCalendar() {
@@ -273,6 +465,10 @@ function openNativeDatePicker(input) {
 
 async function selectDate(date) {
   selectedDate = date;
+  if (!activeProfile) {
+    renderDate();
+    return;
+  }
   setSyncStatus("Carregando");
   renderDate();
   currentWorkoutId = await loadWorkoutForDate(selectedDate);
@@ -301,7 +497,6 @@ function renderMeals() {
         </div>
         <div class="meal-side">
           <strong>${checksCache[meal.id] ? "Feito" : "Plano"}</strong>
-          <span>${meal.detail}</span>
         </div>
       </div>
     </article>
@@ -339,12 +534,24 @@ function renderWorkoutSelector() {
     select.dataset.bound = "true";
     select.addEventListener("change", () => {
       currentWorkoutId = select.value;
-      localStorage.setItem(localKeys.workout, currentWorkoutId);
+      localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
       saveWorkoutForDate(currentWorkoutId);
       renderWorkout(currentWorkoutId);
       renderMeals();
     });
   });
+}
+
+function renderFiles() {
+  const grid = document.getElementById("fileGrid");
+  grid.innerHTML = activeProfile.files.map((file) => `
+    <a class="file-card" href="${file.href}" target="_blank" rel="noreferrer">
+      <span data-icon="file"></span>
+      <strong>${file.label}</strong>
+      <small>${file.name}</small>
+    </a>
+  `).join("");
+  hydrateIcons(grid);
 }
 
 function renderWorkout(workoutId) {
@@ -451,7 +658,7 @@ function bindChartModal() {
 }
 
 async function loadNotes() {
-  const local = JSON.parse(localStorage.getItem(localKeys.notes) || "{}");
+  const local = JSON.parse(localStorage.getItem(localKeys.notes(profileId)) || "{}");
   if (!supabaseClient) return local;
   const { data, error } = await supabaseClient
     .from("workout_exercise_notes")
@@ -462,7 +669,7 @@ async function loadNotes() {
 }
 
 async function loadChecks(date = selectedDate) {
-  const local = JSON.parse(localStorage.getItem(localKeys.checks(date)) || "{}");
+  const local = JSON.parse(localStorage.getItem(localKeys.checks(profileId, date)) || "{}");
   if (!supabaseClient) return local;
   const { data, error } = await supabaseClient
     .from("daily_checks")
@@ -474,7 +681,7 @@ async function loadChecks(date = selectedDate) {
 }
 
 async function loadWorkoutForDate(date = selectedDate) {
-  const fallback = localStorage.getItem(localKeys.workoutForDate(date)) || localStorage.getItem(localKeys.workout) || "treino-e";
+  const fallback = localStorage.getItem(localKeys.workoutForDate(profileId, date)) || localStorage.getItem(localKeys.workout(profileId)) || activeProfile?.defaultWorkout || "treino-e";
   if (!supabaseClient) return fallback;
   const { data, error } = await supabaseClient
     .from("daily_workouts")
@@ -487,7 +694,7 @@ async function loadWorkoutForDate(date = selectedDate) {
 }
 
 async function loadDailyLogs(date = selectedDate) {
-  const local = JSON.parse(localStorage.getItem(`${dailyLogPrefix}${date}`) || "{}");
+  const local = JSON.parse(localStorage.getItem(`${dailyLogPrefix(profileId)}${date}`) || "{}");
   if (!supabaseClient) return local;
   const { data, error } = await supabaseClient
     .from("daily_exercise_logs")
@@ -505,7 +712,7 @@ async function saveExerciseField(exerciseId, field, value) {
   }
 
   notesCache[exerciseId] = { ...(notesCache[exerciseId] || {}), [field]: value };
-  localStorage.setItem(localKeys.notes, JSON.stringify(notesCache));
+  localStorage.setItem(localKeys.notes(profileId), JSON.stringify(notesCache));
 
   document.querySelectorAll(`[data-note="${exerciseId}"][data-field="${field}"]`).forEach((input) => {
     if (input.value !== value) input.value = value;
@@ -524,7 +731,7 @@ async function saveExerciseField(exerciseId, field, value) {
 
 async function saveDailyExerciseWeight(exerciseId, weight) {
   dailyLogsCache[exerciseId] = { ...(dailyLogsCache[exerciseId] || {}), weight };
-  localStorage.setItem(`${dailyLogPrefix}${selectedDate}`, JSON.stringify(dailyLogsCache));
+  localStorage.setItem(`${dailyLogPrefix(profileId)}${selectedDate}`, JSON.stringify(dailyLogsCache));
   await saveWorkoutForDate(currentWorkoutId);
 
   document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
@@ -542,7 +749,7 @@ async function saveDailyExerciseWeight(exerciseId, weight) {
 }
 
 async function saveCheck(itemId, completed) {
-  localStorage.setItem(localKeys.checks(selectedDate), JSON.stringify(checksCache));
+  localStorage.setItem(localKeys.checks(profileId, selectedDate), JSON.stringify(checksCache));
   if (!supabaseClient) return;
   await supabaseClient.from("daily_checks").upsert({
     profile_id: profileId,
@@ -554,7 +761,7 @@ async function saveCheck(itemId, completed) {
 }
 
 async function saveWorkoutForDate(workoutId) {
-  localStorage.setItem(localKeys.workoutForDate(selectedDate), workoutId);
+  localStorage.setItem(localKeys.workoutForDate(profileId, selectedDate), workoutId);
   if (!supabaseClient) return;
   await supabaseClient.from("daily_workouts").upsert({
     profile_id: profileId,
@@ -607,9 +814,9 @@ async function loadExerciseHistory(exerciseId) {
 
 function loadLocalExerciseHistory(exerciseId) {
   return Object.keys(localStorage)
-    .filter((key) => key.startsWith(dailyLogPrefix))
+    .filter((key) => key.startsWith(dailyLogPrefix(profileId)))
     .map((key) => {
-      const date = key.replace(dailyLogPrefix, "");
+      const date = key.replace(dailyLogPrefix(profileId), "");
       const logs = JSON.parse(localStorage.getItem(key) || "{}");
       return { date, weight: normalizeWeight(logs[exerciseId]?.weight) };
     })

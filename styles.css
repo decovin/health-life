@@ -224,7 +224,7 @@ select {
 
 .meal-content {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(118px, 0.44fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   padding: 16px 18px;
 }
@@ -260,15 +260,9 @@ select {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   text-align: right;
-}
-
-.meal-side span {
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.25;
 }
 
 .daily-total {
@@ -376,6 +370,50 @@ select {
   font-size: 13px;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.profile-heading {
+  margin-top: 44px;
+  text-align: center;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.profile-card {
+  min-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(255, 138, 18, 0.16), rgba(255, 255, 255, 0.055)),
+    rgba(14, 15, 14, 0.88);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  text-align: left;
+}
+
+.profile-card strong {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--orange);
+  font-size: clamp(28px, 6vw, 42px);
+  line-height: 1;
+}
+
+.profile-card span {
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.is-profile-selecting .bottom-nav {
+  display: none;
 }
 
 .training-controls {
@@ -836,7 +874,7 @@ textarea {
   }
 
   .meal-content {
-    grid-template-columns: 1fr 96px;
+    grid-template-columns: 1fr auto;
     padding: 12px;
   }
 
@@ -854,8 +892,7 @@ textarea {
     font-size: 16px;
   }
 
-  .meal-main p,
-  .meal-side span {
+  .meal-main p {
     font-size: 13px;
   }
 
@@ -941,7 +978,8 @@ textarea {
   }
 
   .exercise-list,
-  .file-grid {
+  .file-grid,
+  .profile-grid {
     grid-template-columns: 1fr;
   }
 
@@ -982,10 +1020,6 @@ textarea {
   .meal-side {
     align-items: flex-start;
     text-align: left;
-  }
-
-  .meal-side span {
-    display: none;
   }
 
   .daily-total {
