@@ -431,6 +431,9 @@ select {
 }
 
 .workout-segment {
+  display: grid;
+  align-content: center;
+  gap: 2px;
   min-height: 48px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -438,6 +441,21 @@ select {
   background: rgba(255, 255, 255, 0.055);
   cursor: pointer;
   font-weight: 900;
+}
+
+.workout-segment strong {
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.workout-segment small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.workout-segment.is-active small {
+  color: rgba(255, 255, 255, 0.76);
 }
 
 .workout-segment.is-active {
@@ -622,6 +640,37 @@ textarea {
 .notes-field {
   display: block;
   margin-top: 10px;
+}
+
+.workout-complete-panel {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.workout-complete-button {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(255, 138, 18, 0.52);
+  border-radius: 999px;
+  color: var(--orange);
+  background: var(--orange-soft);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.workout-complete-button.is-done {
+  color: var(--text);
+  background: rgba(255, 138, 18, 0.28);
+}
+
+.workout-complete-panel small {
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .file-card {

@@ -282,8 +282,9 @@ const localKeys = {
 const dailyLogPrefix = (profileId) => `fitness:${profileId}:daily-exercise-logs:`;
 
 const supabaseClient = createSupabaseClient();
-let activeProfileId = "";
-let activeProfile = null;
+const initialProfile = profiles[getRequestedProfileId()] || profiles[localStorage.getItem(localKeys.activeProfile)] || null;
+let activeProfileId = initialProfile?.id || "";
+let activeProfile = initialProfile;
 let profileId = activeProfile?.id || "vinicius";
 let meals = activeProfile?.meals || [];
 let workouts = activeProfile?.workouts || [];
@@ -291,6 +292,7 @@ let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
 let latestWeightsCache = {};
+let workoutCompletionCache = {};
 let customWorkoutNames = {};
 let customExerciseNames = {};
 const workoutNameSaveTimers = {};
@@ -323,6 +325,36 @@ function getWorkoutLabel(workout) {
 
 function getExerciseName(exercise) {
   return customExerciseNames[exercise.id] || exercise.name;
+}
+
+function getStrengthWorkouts() {
+  return workouts.filter((workout) => !workout.label.toLowerCase().includes("cardio"));
+}
+
+function getWorkoutCompletionKey(workoutId) {
+  return `workout-done:${workoutId}`;
+}
+
+function getLocalChecksPrefix() {
+  return `fitness:${profileId}:daily-checks:`;
+}
+
+function formatShortDate(date) {
+  if (!date) return "Nunca feito";
+  return date.split("-").reverse().join("/");
+}
+
+function getRequestedProfileId() {
+  const params = new URLSearchParams(window.location.search);
+  const requested = params.get("perfil") || params.get("profile");
+  if (profiles[requested]) return requested;
+
+  const pathProfile = window.location.pathname
+    .split("/")
+    .pop()
+    .replace(/\.html$/, "")
+    .toLowerCase();
+  return profiles[pathProfile] ? pathProfile : "";
 }
 
 function formatDateToIso(date) {
@@ -371,7 +403,7 @@ async function init() {
   }
 
   await loadActiveProfile();
-  showMainView("plan");
+  await showTrainingEntry();
 }
 
 function hydrateIcons(root = document) {
@@ -399,10 +431,13 @@ function setSyncStatus(text) {
 
 function bindNavigation() {
   document.querySelectorAll(".nav-item").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       if (!activeProfile) return;
+      if (button.dataset.view === "training") {
+        await showTrainingEntry();
+        return;
+      }
       showMainView(button.dataset.view);
-      if (button.dataset.view === "training") renderWorkout(currentWorkoutId);
     });
   });
 
@@ -429,7 +464,7 @@ function bindProfileSelection() {
   document.querySelectorAll("[data-profile-select]").forEach((button) => {
     button.addEventListener("click", async () => {
       await activateProfile(button.dataset.profileSelect);
-      showMainView("plan");
+      await showTrainingEntry();
     });
   });
 }
@@ -453,6 +488,7 @@ async function loadActiveProfile() {
   checksCache = await loadChecks(selectedDate);
   dailyLogsCache = await loadDailyLogs(selectedDate);
   latestWeightsCache = await loadLatestWeights();
+  workoutCompletionCache = await loadWorkoutCompletions();
   renderDate();
   renderMeals();
   renderWorkoutSelector();
@@ -481,6 +517,15 @@ function showMainView(viewName) {
   document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
   document.querySelectorAll(".nav-item").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === viewName));
   document.getElementById(`${viewName}View`).classList.add("is-active");
+}
+
+async function showTrainingEntry() {
+  workoutCompletionCache = await loadWorkoutCompletions();
+  currentWorkoutId = getNextWorkoutId();
+  renderWorkoutSelector();
+  renderWorkout(currentWorkoutId);
+  renderMeals();
+  showMainView("training");
 }
 
 function bindCalendar() {
@@ -526,6 +571,7 @@ async function selectDate(date) {
   currentWorkoutId = await loadWorkoutForDate(selectedDate);
   checksCache = await loadChecks(selectedDate);
   dailyLogsCache = await loadDailyLogs(selectedDate);
+  workoutCompletionCache = await loadWorkoutCompletions();
   renderMeals();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
@@ -595,11 +641,11 @@ function renderWorkoutSelector() {
 
   const buttons = document.getElementById("trainingWorkoutButtons");
   if (!buttons) return;
-  buttons.innerHTML = workouts
-    .filter((workout) => !workout.label.toLowerCase().includes("cardio"))
+  buttons.innerHTML = getStrengthWorkouts()
     .map((workout) => `
       <button class="workout-segment ${workout.id === currentWorkoutId ? "is-active" : ""}" type="button" data-workout-button="${workout.id}">
-        ${escapeHtml(getWorkoutName(workout))}
+        <strong>${escapeHtml(getWorkoutName(workout))}</strong>
+        <small>${escapeHtml(formatShortDate(workoutCompletionCache[workout.id]))}</small>
       </button>
     `).join("");
 
@@ -629,8 +675,7 @@ function renderFiles() {
 function renderSettings() {
   const list = document.getElementById("workoutNameSettings");
   if (!list || !activeProfile) return;
-  list.innerHTML = workouts
-    .filter((workout) => !workout.label.toLowerCase().includes("cardio"))
+  list.innerHTML = getStrengthWorkouts()
     .map((workout) => `
       <label class="settings-name-field">
         <span>${escapeHtml(workout.short)}</span>
@@ -677,6 +722,7 @@ function renderWorkout(workoutId) {
     `;
   }).join("");
 
+  const isWorkoutDone = Boolean(checksCache[getWorkoutCompletionKey(workout.id)]);
   document.getElementById("exerciseList").innerHTML = workout.exercises.map((exercise) => {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
@@ -721,7 +767,14 @@ function renderWorkout(workoutId) {
         </label>
       </article>
     `;
-  }).join("");
+  }).join("") + `
+    <div class="workout-complete-panel">
+      <button class="workout-complete-button ${isWorkoutDone ? "is-done" : ""}" type="button" data-workout-complete="${workout.id}">
+        ${isWorkoutDone ? "Treino concluído" : "Concluir treino"}
+      </button>
+      <small>Última vez: ${escapeHtml(formatShortDate(workoutCompletionCache[workout.id]))}</small>
+    </div>
+  `;
 
   bindWorkoutFields();
   hydrateIcons(document.getElementById("exerciseList"));
@@ -779,6 +832,25 @@ function bindWorkoutFields() {
       await toggleExerciseDone(card.dataset.exerciseCard);
     });
   });
+
+  document.querySelectorAll("[data-workout-complete]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await toggleWorkoutComplete(button.dataset.workoutComplete);
+    });
+  });
+}
+
+function getNextWorkoutId() {
+  const strengthWorkouts = getStrengthWorkouts();
+  if (!strengthWorkouts.length) return currentWorkoutId;
+  return [...strengthWorkouts].sort((a, b) => {
+    const dateA = workoutCompletionCache[a.id] || "";
+    const dateB = workoutCompletionCache[b.id] || "";
+    if (!dateA && !dateB) return strengthWorkouts.indexOf(a) - strengthWorkouts.indexOf(b);
+    if (!dateA) return -1;
+    if (!dateB) return 1;
+    return dateA.localeCompare(dateB);
+  })[0].id;
 }
 
 async function toggleExerciseDone(exerciseId) {
@@ -786,6 +858,17 @@ async function toggleExerciseDone(exerciseId) {
   await saveWorkoutForDate(currentWorkoutId);
   await saveCheck(exerciseId, checksCache[exerciseId]);
   renderWorkout(currentWorkoutId);
+  renderMeals();
+}
+
+async function toggleWorkoutComplete(workoutId) {
+  const key = getWorkoutCompletionKey(workoutId);
+  checksCache[key] = !checksCache[key];
+  await saveWorkoutForDate(workoutId);
+  await saveCheck(key, checksCache[key]);
+  workoutCompletionCache = await loadWorkoutCompletions();
+  renderWorkoutSelector();
+  renderWorkout(workoutId);
   renderMeals();
 }
 
@@ -898,6 +981,45 @@ async function loadChecks(date = selectedDate) {
     .eq("check_date", date);
   if (error) return local;
   return Object.fromEntries(data.map((item) => [item.item_id, item.completed]));
+}
+
+async function loadWorkoutCompletions() {
+  const latest = {};
+  const prefix = getLocalChecksPrefix();
+  const completionPrefix = getWorkoutCompletionKey("");
+
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith(prefix))
+    .forEach((key) => {
+      const date = key.replace(prefix, "");
+      const checks = JSON.parse(localStorage.getItem(key) || "{}");
+      Object.entries(checks).forEach(([itemId, completed]) => {
+        if (!completed || !itemId.startsWith(completionPrefix)) return;
+        const workoutId = itemId.replace(completionPrefix, "");
+        if (!latest[workoutId] || date > latest[workoutId]) latest[workoutId] = date;
+      });
+    });
+
+  if (!supabaseClient) return latest;
+
+  const { data, error } = await supabaseClient
+    .from("daily_checks")
+    .select("check_date, item_id")
+    .eq("profile_id", profileId)
+    .eq("completed", true)
+    .like("item_id", `${completionPrefix}%`)
+    .order("check_date", { ascending: false });
+
+  if (error) return latest;
+
+  data.forEach((item) => {
+    const workoutId = item.item_id.replace(completionPrefix, "");
+    if (!latest[workoutId] || item.check_date > latest[workoutId]) {
+      latest[workoutId] = item.check_date;
+    }
+  });
+
+  return latest;
 }
 
 async function loadWorkoutForDate(date = selectedDate) {
