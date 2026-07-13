@@ -3,12 +3,14 @@ const icons = {
   bowl: '<svg viewBox="0 0 24 24"><path d="M4 12h16c-.4 4.5-3.6 7-8 7s-7.6-2.5-8-7Z"/><path d="M3 12h18"/><path d="M7 10c0-1.5 1.5-2.3 3-2.3s3 .8 3 2.3"/><path d="M11 8c.5-1.8 2.1-2.7 4-2.2"/></svg>',
   calendar: '<svg viewBox="0 0 24 24"><path d="M7 2v4M17 2v4M4 8h16M5 4h14a1 1 0 0 1 1 1v15H4V5a1 1 0 0 1 1-1Z"/><path d="M8 12h2M12 12h2M16 12h2M8 16h2M12 16h2M16 16h2"/></svg>',
   chart: '<svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/><path d="M3 20h18"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></svg>',
   clipboard: '<svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"/><path d="M9 10h6M9 14h6M9 18h4"/></svg>',
   dumbbell: '<svg viewBox="0 0 24 24"><path d="M7 7v10M17 7v10M3 9v6M21 9v6M3 12h18"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
   flame: '<svg viewBox="0 0 24 24"><path d="M12 21c-4 0-7-2.8-7-6.7 0-2.9 1.8-5.1 4-7.3.1 2.2 1.2 3.5 2.7 4.4C11.5 8 13.1 5.1 16 3c.4 3.8 3 5.7 3 10.8 0 4.2-3 7.2-7 7.2Z"/></svg>',
   home: '<svg viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10h-6v-6H9v6H3V11Z"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></svg>',
+  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13 7 4 4"/></svg>',
   settings: '<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/><path d="M4 12H2M22 12h-2M12 4V2M12 22v-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
   user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
@@ -274,7 +276,8 @@ const localKeys = {
   notes: (profileId) => `fitness:${profileId}:workout-notes`,
   checks: (profileId, date) => `fitness:${profileId}:daily-checks:${date}`,
   workout: (profileId) => `fitness:${profileId}:selected-workout`,
-  workoutForDate: (profileId, date) => `fitness:${profileId}:selected-workout:${date}`
+  workoutForDate: (profileId, date) => `fitness:${profileId}:selected-workout:${date}`,
+  customNames: (profileId) => `fitness:${profileId}:custom-names`
 };
 const dailyLogPrefix = (profileId) => `fitness:${profileId}:daily-exercise-logs:`;
 
@@ -287,6 +290,11 @@ let workouts = activeProfile?.workouts || [];
 let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
+let latestWeightsCache = {};
+let customWorkoutNames = {};
+let customExerciseNames = {};
+const workoutNameSaveTimers = {};
+let editingExerciseId = "";
 let selectedDate = today;
 let currentWorkoutId = activeProfile ? localStorage.getItem(localKeys.workout(profileId)) || activeProfile.defaultWorkout : "treino-e";
 
@@ -294,6 +302,27 @@ function parseTarget(target) {
   const match = target.match(/^(\d+)x(.+)$/i);
   if (!match) return { series: "-", reps: target };
   return { series: match[1], reps: match[2].trim() };
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function getWorkoutName(workout) {
+  return customWorkoutNames[workout.id] || workout.short;
+}
+
+function getWorkoutLabel(workout) {
+  return customWorkoutNames[workout.id] || workout.label;
+}
+
+function getExerciseName(exercise) {
+  return customExerciseNames[exercise.id] || exercise.name;
 }
 
 function formatDateToIso(date) {
@@ -419,14 +448,17 @@ async function activateProfile(profileKey) {
 async function loadActiveProfile() {
   setSyncStatus("Carregando");
   notesCache = await loadNotes();
+  await loadCustomNames();
   currentWorkoutId = await loadWorkoutForDate(selectedDate);
   checksCache = await loadChecks(selectedDate);
   dailyLogsCache = await loadDailyLogs(selectedDate);
+  latestWeightsCache = await loadLatestWeights();
   renderDate();
   renderMeals();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
   renderFiles();
+  renderSettings();
   setSyncStatus(supabaseClient ? "Supabase" : "Local");
 }
 
@@ -531,7 +563,7 @@ function renderMeals() {
     <span data-icon="flame"></span>
     <div><strong>${dietDone}/${meals.length}</strong><small>dieta</small></div>
     <div><strong>${workoutDone}/${workout.exercises.length}</strong><small>treino</small></div>
-    <div><strong>${workout.short}</strong><small>tipo</small></div>
+    <div><strong>${escapeHtml(getWorkoutName(workout))}</strong><small>tipo</small></div>
     <div><strong>${selectedDay}</strong><small>dia</small></div>
   `;
   hydrateIcons(document.getElementById("dailyTotal"));
@@ -548,12 +580,32 @@ function renderMeals() {
 
 function renderWorkoutSelector() {
   document.querySelectorAll(".workout-select").forEach((select) => {
-    select.innerHTML = workouts.map((workout) => `<option value="${workout.id}">${workout.label}</option>`).join("");
+    select.innerHTML = workouts.map((workout) => `<option value="${workout.id}">${escapeHtml(getWorkoutLabel(workout))}</option>`).join("");
     select.value = currentWorkoutId;
     if (select.dataset.bound === "true") return;
     select.dataset.bound = "true";
     select.addEventListener("change", () => {
       currentWorkoutId = select.value;
+      localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
+      saveWorkoutForDate(currentWorkoutId);
+      renderWorkout(currentWorkoutId);
+      renderMeals();
+    });
+  });
+
+  const buttons = document.getElementById("trainingWorkoutButtons");
+  if (!buttons) return;
+  buttons.innerHTML = workouts
+    .filter((workout) => !workout.label.toLowerCase().includes("cardio"))
+    .map((workout) => `
+      <button class="workout-segment ${workout.id === currentWorkoutId ? "is-active" : ""}" type="button" data-workout-button="${workout.id}">
+        ${escapeHtml(getWorkoutName(workout))}
+      </button>
+    `).join("");
+
+  buttons.querySelectorAll("[data-workout-button]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentWorkoutId = button.dataset.workoutButton;
       localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
       saveWorkoutForDate(currentWorkoutId);
       renderWorkout(currentWorkoutId);
@@ -574,62 +626,94 @@ function renderFiles() {
   hydrateIcons(grid);
 }
 
+function renderSettings() {
+  const list = document.getElementById("workoutNameSettings");
+  if (!list || !activeProfile) return;
+  list.innerHTML = workouts
+    .filter((workout) => !workout.label.toLowerCase().includes("cardio"))
+    .map((workout) => `
+      <label class="settings-name-field">
+        <span>${escapeHtml(workout.short)}</span>
+        <input data-workout-name="${workout.id}" value="${escapeHtml(getWorkoutName(workout))}" placeholder="${escapeHtml(workout.short)}" />
+      </label>
+    `).join("");
+
+  list.querySelectorAll("[data-workout-name]").forEach((input) => {
+    const save = (refreshSettings = true) => saveWorkoutName(input.dataset.workoutName, input.value, refreshSettings);
+    input.addEventListener("input", () => {
+      clearTimeout(workoutNameSaveTimers[input.dataset.workoutName]);
+      workoutNameSaveTimers[input.dataset.workoutName] = setTimeout(() => save(false), 350);
+    });
+    input.addEventListener("change", () => save(true));
+    input.addEventListener("blur", () => save(true));
+  });
+}
+
 function renderWorkout(workoutId) {
   const workout = workouts.find((item) => item.id === workoutId) || workouts[0];
   currentWorkoutId = workout.id;
   document.querySelectorAll(".workout-select").forEach((selector) => {
     selector.value = workout.id;
   });
+  document.querySelectorAll("[data-workout-button]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.workoutButton === workout.id);
+  });
 
   document.getElementById("exerciseTable").innerHTML = workout.exercises.map((exercise, index) => {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
+    const latest = latestWeightsCache[exercise.id] || {};
+    const weightValue = daily.weight || latest.weight || "";
+    const exerciseName = getExerciseName(exercise);
     return `
       <tr>
         <td>${index + 1}</td>
-        <td>${exercise.name}</td>
+        <td>${escapeHtml(exerciseName)}</td>
         <td>${exercise.series}</td>
         <td>${exercise.reps}</td>
-        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${daily.weight || ""}" placeholder="--" /></td>
+        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${weightValue}" placeholder="--" /></td>
         <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${saved.machine || ""}" placeholder="--" /></td>
       </tr>
     `;
   }).join("");
 
-  document.getElementById("workoutMeta").innerHTML = `
-    <strong>${workout.short}</strong>
-    <span>${workout.label}</span>
-    ${workout.note ? `<em>${workout.note}</em>` : ""}
-  `;
-
   document.getElementById("exerciseList").innerHTML = workout.exercises.map((exercise) => {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
+    const latest = latestWeightsCache[exercise.id];
+    const weightValue = daily.weight || latest?.weight || "";
+    const exerciseName = getExerciseName(exercise);
+    const isEditingName = editingExerciseId === exercise.id;
     return `
-      <article class="exercise-card">
+      <article class="exercise-card" data-exercise-card="${exercise.id}">
         <div class="exercise-title">
           <div>
-            <h3>${exercise.name}</h3>
+            <div class="exercise-name-row">
+              ${isEditingName
+                ? `<input class="exercise-name-input" data-exercise-name-input="${exercise.id}" value="${escapeHtml(exerciseName)}" aria-label="Nome do exercício" />`
+                : `<h3>${escapeHtml(exerciseName)}</h3>`}
+              <button class="edit-name-button" type="button" ${isEditingName ? `data-save-exercise-name="${exercise.id}"` : `data-edit-exercise="${exercise.id}"`} aria-label="${isEditingName ? "Salvar nome" : `Editar nome de ${escapeHtml(exerciseName)}`}" title="${isEditingName ? "Salvar nome" : "Editar nome"}">
+                <span data-icon="${isEditingName ? "check" : "edit"}"></span>
+              </button>
+            </div>
             <p>${exercise.target}</p>
           </div>
-          <div class="exercise-actions">
-            <button class="chart-button" type="button" data-chart-exercise="${exercise.id}" aria-label="Ver evolução de ${exercise.name}" title="Ver evolução">
-              <span data-icon="chart"></span>
-            </button>
-            <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
-              ${checksCache[exercise.id] ? "Feito" : "Não feito"}
-            </button>
-          </div>
         </div>
-        <div class="exercise-fields">
+        <div class="exercise-control-row">
           <label>
             <span>Peso</span>
-            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${daily.weight || ""}" placeholder="kg" />
+            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${weightValue}" placeholder="kg" />
           </label>
           <label>
             <span>Máquina</span>
             <input data-note="${exercise.id}" data-field="machine" value="${saved.machine || ""}" placeholder="número" />
           </label>
+          <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
+            ${checksCache[exercise.id] ? "Feito" : "Não feito"}
+          </button>
+          <button class="chart-button" type="button" data-chart-exercise="${exercise.id}" aria-label="Ver evolução de ${escapeHtml(exerciseName)}" title="Ver evolução">
+            <span data-icon="chart"></span>
+          </button>
         </div>
         <label class="notes-field">
           <span>Observação</span>
@@ -650,21 +734,137 @@ function bindWorkoutFields() {
   });
 
   document.querySelectorAll("[data-exercise-done]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const id = button.dataset.exerciseDone;
-      checksCache[id] = !checksCache[id];
-      await saveWorkoutForDate(currentWorkoutId);
-      await saveCheck(id, checksCache[id]);
-      renderWorkout(currentWorkoutId);
-      renderMeals();
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await toggleExerciseDone(button.dataset.exerciseDone);
     });
   });
 
   document.querySelectorAll("[data-chart-exercise]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       openExerciseChart(button.dataset.chartExercise);
     });
   });
+
+  document.querySelectorAll("[data-edit-exercise]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      beginExerciseNameEdit(button.dataset.editExercise);
+    });
+  });
+
+  document.querySelectorAll("[data-save-exercise-name]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const input = document.querySelector(`[data-exercise-name-input="${button.dataset.saveExerciseName}"]`);
+      saveExerciseName(button.dataset.saveExerciseName, input?.value || "");
+    });
+  });
+
+  document.querySelectorAll("[data-exercise-name-input]").forEach((input) => {
+    input.addEventListener("blur", () => saveExerciseName(input.dataset.exerciseNameInput, input.value));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") input.blur();
+      if (event.key === "Escape") {
+        editingExerciseId = "";
+        renderWorkout(currentWorkoutId);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-exercise-card]").forEach((card) => {
+    card.addEventListener("click", async (event) => {
+      if (event.target.closest("input, textarea, button, label")) return;
+      await toggleExerciseDone(card.dataset.exerciseCard);
+    });
+  });
+}
+
+async function toggleExerciseDone(exerciseId) {
+  checksCache[exerciseId] = !checksCache[exerciseId];
+  await saveWorkoutForDate(currentWorkoutId);
+  await saveCheck(exerciseId, checksCache[exerciseId]);
+  renderWorkout(currentWorkoutId);
+  renderMeals();
+}
+
+async function loadCustomNames() {
+  const local = JSON.parse(localStorage.getItem(localKeys.customNames(profileId)) || "{}");
+  customWorkoutNames = local.workouts || {};
+  customExerciseNames = local.exercises || {};
+
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from("profile_settings")
+    .select("workout_names, exercise_names")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+
+  if (error || !data) return;
+  customWorkoutNames = data.workout_names || customWorkoutNames;
+  customExerciseNames = data.exercise_names || customExerciseNames;
+  localStorage.setItem(localKeys.customNames(profileId), JSON.stringify({
+    workouts: customWorkoutNames,
+    exercises: customExerciseNames
+  }));
+}
+
+async function persistCustomNames() {
+  localStorage.setItem(localKeys.customNames(profileId), JSON.stringify({
+    workouts: customWorkoutNames,
+    exercises: customExerciseNames
+  }));
+
+  if (!supabaseClient) return;
+  await supabaseClient.from("profile_settings").upsert({
+    profile_id: profileId,
+    workout_names: customWorkoutNames,
+    exercise_names: customExerciseNames,
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function saveWorkoutName(workoutId, value, refreshSettings = true) {
+  const workout = workouts.find((item) => item.id === workoutId);
+  if (!workout) return;
+  const name = value.trim();
+  if (!name || name === workout.short || name === workout.label) {
+    delete customWorkoutNames[workoutId];
+  } else {
+    customWorkoutNames[workoutId] = name;
+  }
+  await persistCustomNames();
+  renderWorkoutSelector();
+  renderWorkout(currentWorkoutId);
+  renderMeals();
+  if (refreshSettings) renderSettings();
+}
+
+function beginExerciseNameEdit(exerciseId) {
+  const exercise = findExercise(exerciseId);
+  if (!exercise) return;
+  editingExerciseId = exerciseId;
+  renderWorkout(currentWorkoutId);
+  setTimeout(() => {
+    const input = document.querySelector(`[data-exercise-name-input="${exerciseId}"]`);
+    input?.focus();
+    input?.select();
+  }, 0);
+}
+
+async function saveExerciseName(exerciseId, value) {
+  const exercise = findExercise(exerciseId);
+  if (!exercise) return;
+  const name = value.trim();
+  if (!name || name === exercise.name) {
+    delete customExerciseNames[exerciseId];
+  } else {
+    customExerciseNames[exerciseId] = name;
+  }
+  editingExerciseId = "";
+  await persistCustomNames();
+  renderWorkout(currentWorkoutId);
 }
 
 function bindChartModal() {
@@ -725,6 +925,42 @@ async function loadDailyLogs(date = selectedDate) {
   return Object.fromEntries(data.map((item) => [item.exercise_id, { weight: item.weight || "" }]));
 }
 
+async function loadLatestWeights() {
+  const latest = {};
+
+  Object.keys(localStorage)
+    .filter((key) => key.startsWith(dailyLogPrefix(profileId)))
+    .forEach((key) => {
+      const date = key.replace(dailyLogPrefix(profileId), "");
+      const logs = JSON.parse(localStorage.getItem(key) || "{}");
+      Object.entries(logs).forEach(([exerciseId, log]) => {
+        if (!log?.weight) return;
+        if (!latest[exerciseId] || date > latest[exerciseId].date) {
+          latest[exerciseId] = { date, weight: log.weight };
+        }
+      });
+    });
+
+  if (!supabaseClient) return latest;
+
+  const { data, error } = await supabaseClient
+    .from("daily_exercise_logs")
+    .select("exercise_id, log_date, weight")
+    .eq("profile_id", profileId)
+    .order("log_date", { ascending: false });
+
+  if (error) return latest;
+
+  data.forEach((item) => {
+    if (!item.weight) return;
+    if (!latest[item.exercise_id] || item.log_date > latest[item.exercise_id].date) {
+      latest[item.exercise_id] = { date: item.log_date, weight: item.weight };
+    }
+  });
+
+  return latest;
+}
+
 async function saveExerciseField(exerciseId, field, value) {
   if (field === "weight") {
     await saveDailyExerciseWeight(exerciseId, value);
@@ -752,6 +988,9 @@ async function saveExerciseField(exerciseId, field, value) {
 async function saveDailyExerciseWeight(exerciseId, weight) {
   dailyLogsCache[exerciseId] = { ...(dailyLogsCache[exerciseId] || {}), weight };
   localStorage.setItem(`${dailyLogPrefix(profileId)}${selectedDate}`, JSON.stringify(dailyLogsCache));
+  if (weight && (!latestWeightsCache[exerciseId] || selectedDate >= latestWeightsCache[exerciseId].date)) {
+    latestWeightsCache[exerciseId] = { date: selectedDate, weight };
+  }
   await saveWorkoutForDate(currentWorkoutId);
 
   document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
@@ -796,7 +1035,7 @@ async function openExerciseChart(exerciseId) {
   if (!exercise) return;
 
   const modal = document.getElementById("chartModal");
-  document.getElementById("chartTitle").textContent = exercise.name;
+  document.getElementById("chartTitle").textContent = getExerciseName(exercise);
   document.getElementById("chartBody").innerHTML = `<p class="chart-empty">Carregando evolução...</p>`;
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");

@@ -81,12 +81,9 @@
             <h2>Pesos e máquinas</h2>
           </div>
           <div class="training-controls">
-            <label for="trainingWorkoutSelect">
-              <span>Tipo de treino</span>
-              <select class="workout-select" id="trainingWorkoutSelect" aria-label="Selecionar tipo de treino"></select>
-            </label>
+            <span>Tipo de treino</span>
+            <div class="workout-segments" id="trainingWorkoutButtons" aria-label="Selecionar tipo de treino"></div>
           </div>
-          <div class="workout-meta" id="workoutMeta"></div>
           <div class="exercise-list" id="exerciseList"></div>
         </section>
 
@@ -106,6 +103,10 @@
           <article class="settings-card">
             <span>Status</span>
             <strong id="syncStatus">Local</strong>
+          </article>
+          <article class="settings-card settings-name-card">
+            <span>Nomes dos treinos</span>
+            <div class="settings-name-list" id="workoutNameSettings"></div>
           </article>
           <button class="secondary-action" id="switchProfile" type="button">Trocar perfil</button>
           <button class="danger-button" id="resetMeals" type="button">Limpar marcações do dia</button>

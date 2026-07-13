@@ -34,10 +34,19 @@ create table if not exists public.daily_exercise_logs (
   primary key (profile_id, log_date, exercise_id)
 );
 
+create table if not exists public.profile_settings (
+  profile_id text not null,
+  workout_names jsonb default '{}'::jsonb,
+  exercise_names jsonb default '{}'::jsonb,
+  updated_at timestamptz default now(),
+  primary key (profile_id)
+);
+
 alter table public.workout_exercise_notes enable row level security;
 alter table public.daily_checks enable row level security;
 alter table public.daily_workouts enable row level security;
 alter table public.daily_exercise_logs enable row level security;
+alter table public.profile_settings enable row level security;
 
 drop policy if exists "Allow anon exercise note access" on public.workout_exercise_notes;
 create policy "Allow anon exercise note access"
@@ -71,7 +80,16 @@ to anon
 using (true)
 with check (true);
 
+drop policy if exists "Allow anon profile settings access" on public.profile_settings;
+create policy "Allow anon profile settings access"
+on public.profile_settings
+for all
+to anon
+using (true)
+with check (true);
+
 grant select, insert, update, delete on public.workout_exercise_notes to anon;
 grant select, insert, update, delete on public.daily_checks to anon;
 grant select, insert, update, delete on public.daily_workouts to anon;
 grant select, insert, update, delete on public.daily_exercise_logs to anon;
+grant select, insert, update, delete on public.profile_settings to anon;
