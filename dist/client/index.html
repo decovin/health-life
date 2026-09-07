@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070807" />
+    <title>Health Life</title>
+    <link rel="icon" href="/icons/health-life.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/health-life.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <div class="phone-shell">
+      <header class="app-header">
+        <button class="icon-button" id="openCalendar" type="button" aria-label="Calendário" title="Calendário">
+          <span data-icon="calendar"></span>
+        </button>
+        <input class="native-date-input" id="historyDateInput" type="date" aria-label="Selecionar dia" />
+        <div class="header-title">
+          <h1>Health Life</h1>
+          <p id="todayLabel">Hoje</p>
+          <input class="native-date-input title-date-input" id="titleDateInput" type="date" aria-label="Selecionar dia pelo texto da data" />
+        </div>
+        <button class="icon-button" id="openProfileSelector" type="button" aria-label="Perfil" title="Perfil">
+          <span data-icon="user"></span>
+        </button>
+      </header>
+
+      <main>
+        <section class="view is-active" id="profileView">
+          <div class="screen-heading profile-heading">
+            <p>Perfil</p>
+            <h2>Escolha seu plano</h2>
+          </div>
+          <div class="profile-grid">
+            <button class="profile-card" type="button" data-profile-select="vinicius">
+              <strong>Vinicius</strong>
+            </button>
+            <button class="profile-card" type="button" data-profile-select="leticia">
+              <strong>Letícia</strong>
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="planView">
+          <div class="section-title">
+            <span data-icon="utensils"></span>
+            <h2>Dieta do dia</h2>
+          </div>
+          <div class="meal-grid" id="mealGrid"></div>
+          <article class="daily-total" id="dailyTotal"></article>
+
+          <div class="section-title workout-title">
+            <span data-icon="dumbbell"></span>
+            <h2>Treino do dia</h2>
+            <select class="workout-select" id="workoutSelect" aria-label="Selecionar treino"></select>
+          </div>
+          <div class="workout-table-wrap">
+            <table class="workout-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Exercício</th>
+                  <th>Séries</th>
+                  <th>Reps</th>
+                  <th>Carga</th>
+                  <th>Máq.</th>
+                </tr>
+              </thead>
+              <tbody id="exerciseTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="view" id="trainingView">
+          <div class="screen-heading">
+            <p>Treino</p>
+            <h2>Pesos e máquinas</h2>
+          </div>
+          <div class="training-controls">
+            <span>Tipo de treino</span>
+            <div class="workout-segments" id="trainingWorkoutButtons" aria-label="Selecionar tipo de treino"></div>
+          </div>
+          <div class="exercise-list" id="exerciseList"></div>
+        </section>
+
+        <section class="view" id="filesView">
+          <div class="screen-heading">
+            <p>Arquivos</p>
+            <h2>PDFs originais</h2>
+          </div>
+          <div class="file-grid" id="fileGrid"></div>
+        </section>
+
+        <section class="view" id="settingsView">
+          <div class="screen-heading">
+            <p>Ajustes</p>
+            <h2>Sincronização</h2>
+          </div>
+          <article class="settings-card">
+            <span>Status</span>
+            <strong id="syncStatus">Local</strong>
+          </article>
+          <article class="settings-card settings-name-card">
+            <span>Nomes dos treinos</span>
+            <div class="settings-name-list" id="workoutNameSettings"></div>
+          </article>
+          <button class="secondary-action" id="switchProfile" type="button">Trocar perfil</button>
+          <button class="danger-button" id="resetMeals" type="button">Limpar marcações do dia</button>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Navegação principal">
+        <button class="nav-item" data-view="plan" type="button">
+          <span data-icon="home"></span>
+          <strong>Plano</strong>
+        </button>
+        <button class="nav-item" data-view="training" type="button">
+          <span data-icon="chart"></span>
+          <strong>Treino</strong>
+        </button>
+        <button class="nav-item" data-view="files" type="button">
+          <span data-icon="clipboard"></span>
+          <strong>Arquivos</strong>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <span data-icon="settings"></span>
+          <strong>Ajustes</strong>
+        </button>
+      </nav>
+    </div>
+
+    <div class="chart-modal" id="chartModal" aria-hidden="true">
+      <div class="chart-backdrop" data-chart-close></div>
+      <section class="chart-panel" role="dialog" aria-modal="true" aria-labelledby="chartTitle">
+        <div class="chart-heading">
+          <div>
+            <p>Evolução de carga</p>
+            <h2 id="chartTitle">Exercício</h2>
+          </div>
+          <button class="chart-close" data-chart-close type="button" aria-label="Fechar gráfico">&times;</button>
+        </div>
+        <div class="chart-body" id="chartBody"></div>
+      </section>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
