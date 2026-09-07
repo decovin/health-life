@@ -7,6 +7,12 @@
   "theme_color": "#070807",
   "icons": [
     {
+      "src": "/icons/health-life-512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
       "src": "/icons/health-life.svg",
       "sizes": "any",
       "type": "image/svg+xml",
