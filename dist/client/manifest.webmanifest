@@ -7,8 +7,8 @@
   "theme_color": "#070807",
   "icons": [
     {
-      "src": "/icons/health-life-512.png?v=2",
-      "sizes": "512x512",
+      "src": "https://raw.githubusercontent.com/decovin/health-life/codex/iphone-icon/apple-touch-icon.png",
+      "sizes": "180x180",
       "type": "image/png",
       "purpose": "any maskable"
     },
