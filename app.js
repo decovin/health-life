@@ -299,6 +299,7 @@ let checksCache = {};
 let dailyLogsCache = {};
 let latestWeightsCache = {};
 let workoutCompletionCache = {};
+let timelineHistoryCache = {};
 let customWorkoutNames = {};
 let customExerciseNames = {};
 const workoutNameSaveTimers = {};
@@ -521,6 +522,7 @@ async function loadActiveProfile() {
   renderMeals();
   renderWorkoutSelector();
   renderWorkoutPlanSelector();
+  renderWorkoutTimeline();
   renderWorkout(currentWorkoutId);
   renderFiles();
   renderSettings();
@@ -692,13 +694,74 @@ async function selectDate(date) {
     loadWorkoutCompletions()
   ]);
   currentWorkoutId = workoutId;
+  const historicalPlan = findPlanForWorkout(workoutId);
+  if (historicalPlan) applyViewedPlan(historicalPlan.id);
   checksCache = checks;
   dailyLogsCache = dailyLogs;
   workoutCompletionCache = completions;
   renderMeals();
   renderWorkoutSelector();
+  renderWorkoutPlanSelector();
+  renderWorkoutTimeline();
   renderWorkout(currentWorkoutId);
   setSyncStatus(supabaseClient ? "Supabase" : "Local");
+}
+
+function getTimelineDates() {
+  return Array.from({ length: 30 }, (_, index) => {
+    const date = parseIsoDate(today);
+    date.setDate(date.getDate() - (29 - index));
+    return formatDateToIso(date);
+  });
+}
+
+function findPlanForWorkout(workoutId) {
+  return workoutPlans.find((plan) => plan.workouts.some((workout) => workout.id === workoutId));
+}
+
+function getTimelineWorkoutName(workoutId) {
+  for (const plan of workoutPlans) {
+    const workout = plan.workouts.find((item) => item.id === workoutId);
+    if (workout) return customWorkoutNames[workout.id] || workout.short || workout.label;
+  }
+  return "Treino realizado";
+}
+
+function renderWorkoutTimeline() {
+  const timeline = document.getElementById("workoutTimeline");
+  if (!timeline) return;
+  const dates = getTimelineDates();
+  const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+  const lastSeven = dates.slice(-7);
+  const completedLastSeven = lastSeven.reduce((total, date) => total + (timelineHistoryCache[date]?.length || 0), 0);
+  document.getElementById("timelineSummary").textContent = `${completedLastSeven} ${completedLastSeven === 1 ? "treino" : "treinos"} nos últimos 7 dias`;
+
+  timeline.innerHTML = dates.map((date) => {
+    const parsed = parseIsoDate(date);
+    const completed = Boolean(timelineHistoryCache[date]?.length);
+    const isSelected = date === selectedDate;
+    const isToday = date === today;
+    const label = `${isToday ? "Hoje, " : ""}${weekday.format(parsed)}, ${parsed.getDate()}`;
+    return `
+      <button class="timeline-day ${completed ? "is-complete" : ""} ${isSelected ? "is-selected" : ""}" type="button" data-timeline-date="${date}" aria-label="${escapeHtml(label)}${completed ? ", treino realizado" : ", sem treino"}" aria-pressed="${isSelected}">
+        <span class="timeline-weekday">${isToday ? "Hoje" : weekday.format(parsed).replace(".", "")}</span>
+        <span class="timeline-dot"></span>
+        <strong>${parsed.getDate()}</strong>
+      </button>`;
+  }).join("");
+
+  const selectedWorkouts = timelineHistoryCache[selectedDate] || [];
+  const selectedLabel = selectedDate === today ? "Hoje" : formatShortDate(selectedDate);
+  document.getElementById("timelineDayDetail").textContent = selectedWorkouts.length
+    ? `${selectedLabel} · ${selectedWorkouts.map(getTimelineWorkoutName).join(" + ")}`
+    : `${selectedLabel} · nenhum treino registrado`;
+
+  timeline.querySelectorAll("[data-timeline-date]").forEach((button) => {
+    button.addEventListener("click", () => selectDate(button.dataset.timelineDate));
+  });
+  requestAnimationFrame(() => {
+    timeline.querySelector(`[data-timeline-date="${selectedDate}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: selectedDate === today ? "end" : "center" });
+  });
 }
 
 function renderMeals() {
@@ -1188,9 +1251,14 @@ async function toggleWorkoutComplete(workoutId) {
   checksCache[key] = !checksCache[key];
   if (checksCache[key]) {
     workoutCompletionCache[workoutId] = selectedDate;
-  } else if (workoutCompletionCache[workoutId] === selectedDate) {
-    delete workoutCompletionCache[workoutId];
+    timelineHistoryCache[selectedDate] ||= [];
+    if (!timelineHistoryCache[selectedDate].includes(workoutId)) timelineHistoryCache[selectedDate].push(workoutId);
+  } else {
+    if (workoutCompletionCache[workoutId] === selectedDate) delete workoutCompletionCache[workoutId];
+    timelineHistoryCache[selectedDate] = (timelineHistoryCache[selectedDate] || []).filter((id) => id !== workoutId);
+    if (!timelineHistoryCache[selectedDate].length) delete timelineHistoryCache[selectedDate];
   }
+  renderWorkoutTimeline();
   renderWorkoutSelector();
   renderWorkout(workoutId);
   renderMeals();
@@ -1313,6 +1381,8 @@ async function loadChecks(date = selectedDate) {
 
 async function loadWorkoutCompletions() {
   const latest = {};
+  const timeline = {};
+  const timelineStart = getTimelineDates()[0];
   const prefix = getLocalChecksPrefix();
   const completionPrefix = getWorkoutCompletionKey("");
 
@@ -1325,10 +1395,17 @@ async function loadWorkoutCompletions() {
         if (!completed || !itemId.startsWith(completionPrefix)) return;
         const workoutId = itemId.replace(completionPrefix, "");
         if (!latest[workoutId] || date > latest[workoutId]) latest[workoutId] = date;
+        if (date >= timelineStart) {
+          timeline[date] ||= [];
+          if (!timeline[date].includes(workoutId)) timeline[date].push(workoutId);
+        }
       });
     });
 
-  if (!supabaseClient) return latest;
+  if (!supabaseClient) {
+    timelineHistoryCache = timeline;
+    return latest;
+  }
 
   const { data, error } = await supabaseClient
     .from("daily_checks")
@@ -1338,15 +1415,23 @@ async function loadWorkoutCompletions() {
     .like("item_id", `${completionPrefix}%`)
     .order("check_date", { ascending: false });
 
-  if (error) return latest;
+  if (error) {
+    timelineHistoryCache = timeline;
+    return latest;
+  }
 
   data.forEach((item) => {
     const workoutId = item.item_id.replace(completionPrefix, "");
     if (!latest[workoutId] || item.check_date > latest[workoutId]) {
       latest[workoutId] = item.check_date;
     }
+    if (item.check_date >= timelineStart) {
+      timeline[item.check_date] ||= [];
+      if (!timeline[item.check_date].includes(workoutId)) timeline[item.check_date].push(workoutId);
+    }
   });
 
+  timelineHistoryCache = timeline;
   return latest;
 }
 
