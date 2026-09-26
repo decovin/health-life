@@ -468,6 +468,25 @@ select {
   background: var(--orange-soft);
 }
 
+.workout-segment-add {
+  width: 48px;
+  min-height: 48px;
+  justify-self: start;
+  border: 1px solid rgba(255, 138, 18, .28);
+  border-radius: 50%;
+  color: var(--orange);
+  background: transparent;
+  font-size: 25px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.workout-segment-add:hover {
+  border-color: rgba(255, 138, 18, .6);
+  background: rgba(255, 138, 18, .08);
+}
+
 .workout-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1262,19 +1281,29 @@ textarea {
 }
 
 .plan-toolbar {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  margin: 22px 0 26px;
-  padding: 16px;
-  border: 1px solid rgba(255, 201, 74, .18);
-  border-radius: 18px;
-  background: linear-gradient(120deg, rgba(255,138,18,.1), rgba(255,255,255,.035));
+  margin: 12px 0 24px;
 }
 
-.plan-toolbar label { flex: 1; }
-.plan-toolbar label > span,
+.plan-context-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  padding: 4px 1px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-context-button:hover { color: #d7c8bc; }
+.plan-context-arrow { color: rgba(255, 138, 18, .65); font-size: 22px; line-height: 1; }
+
 .editor-plan-name > span,
+.editor-history-field > span,
 .section-fields label > span,
 .exercise-editor-row label > span {
   display: block;
@@ -1286,7 +1315,18 @@ textarea {
   text-transform: uppercase;
 }
 
-.plan-toolbar select { width: 100%; }
+.editor-history-field {
+  display: block;
+  margin: 0 0 14px;
+}
+
+.editor-history-field select {
+  width: 100%;
+  min-height: 42px;
+  border-color: rgba(255,255,255,.12);
+  color: var(--muted);
+  background: rgba(255,255,255,.035);
+}
 
 .outline-action {
   display: flex;
@@ -1378,6 +1418,16 @@ textarea {
 .add-section-button { width: 100%; min-height: 54px; }
 .editor-footer { justify-content: flex-end; border-top: 1px solid var(--line-soft); }
 .editor-footer .secondary-action { width: auto; margin: 0; }
+.quiet-new-plan {
+  margin-right: auto;
+  border: 0;
+  padding: 8px 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+.quiet-new-plan:hover { color: var(--orange); }
 body.editor-is-open { overflow: hidden; }
 
 @media (max-width: 800px) {
@@ -1389,9 +1439,6 @@ body.editor-is-open { overflow: hidden; }
 
 @media (max-width: 560px) {
   .training-heading { align-items: flex-start; flex-direction: column; }
-  .new-plan-button { width: 100%; }
-  .plan-toolbar { align-items: stretch; flex-direction: column; }
-  .outline-action { justify-content: center; }
   .editor-header, .editor-footer, .editor-body { padding: 18px; }
   .section-fields { grid-template-columns: 1fr; }
   .wide-field { grid-column: auto; }
@@ -1401,5 +1448,8 @@ body.editor-is-open { overflow: hidden; }
   .exercise-notes-field { grid-column: 1/-1; }
   .exercise-remove { grid-column: 2; grid-row: 1; justify-self: end; }
   .exercise-editor-row label > span { font-size: 10px; letter-spacing: .04em; }
-  .editor-footer > button { flex: 1; }
+  .editor-footer { flex-wrap: wrap; }
+  .editor-footer .quiet-new-plan { width: 100%; margin-right: 0; text-align: left; }
+  .editor-footer .secondary-action,
+  .editor-footer .save-plan-button { flex: 1; }
 }

@@ -82,14 +82,12 @@
               <p>Treino</p>
               <h2>Seu ciclo atual</h2>
             </div>
-            <button class="new-plan-button" id="newWorkoutPlan" type="button"><span>+</span> Novo treino</button>
           </div>
           <div class="plan-toolbar">
-            <label>
-              <span>Ciclo de treino</span>
-              <select id="workoutPlanSelect" aria-label="Selecionar ciclo de treino"></select>
-            </label>
-            <button class="outline-action" id="editWorkoutPlan" type="button"><span data-icon="edit"></span> Editar treino</button>
+            <button class="plan-context-button" id="editWorkoutPlan" type="button">
+              <span id="currentPlanText">Treino vigente</span>
+              <span class="plan-context-arrow">›</span>
+            </button>
           </div>
           <div class="training-controls">
             <span>Tipo de treino</span>
@@ -177,10 +175,15 @@
             <strong>Seções do treino</strong>
             <p>Crie sua divisão e adicione quantos exercícios precisar.</p>
           </div>
+          <label class="editor-history-field">
+            <span>Consultar outro ciclo</span>
+            <select id="planHistorySelect" aria-label="Consultar outro ciclo de treino"></select>
+          </label>
           <div id="sectionEditorList"></div>
           <button class="add-section-button" id="addWorkoutSection" type="button"><span>+</span> Adicionar seção</button>
         </div>
         <footer class="editor-footer">
+          <button class="quiet-new-plan" id="newWorkoutPlan" type="button">Iniciar outro ciclo</button>
           <button class="secondary-action" data-editor-close type="button">Cancelar</button>
           <button class="save-plan-button" id="saveWorkoutPlan" type="button">Salvar treino</button>
         </footer>

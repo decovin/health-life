@@ -350,6 +350,11 @@ function formatShortDate(date) {
   return date.split("-").reverse().join("/");
 }
 
+function formatPlanDate(date) {
+  if (!date) return "data não informada";
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(date));
+}
+
 function getRequestedProfileId() {
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("perfil") || params.get("profile");
@@ -630,31 +635,14 @@ function persistWorkoutPlans() {
 }
 
 function renderWorkoutPlanSelector() {
-  const select = document.getElementById("workoutPlanSelect");
-  if (!select) return;
-  select.innerHTML = [...workoutPlans].reverse().map((plan) => {
-    const isActive = plan.id === activeWorkoutPlanId;
-    return `<option value="${plan.id}">${escapeHtml(plan.name)}${isActive ? " · atual" : " · histórico"}</option>`;
-  }).join("");
-  select.value = viewedWorkoutPlanId;
-  if (select.dataset.bound !== "true") {
-    select.dataset.bound = "true";
-    select.addEventListener("change", () => {
-      applyViewedPlan(select.value);
-      currentWorkoutId = workouts[0]?.id || "";
-      renderWorkoutPlanSelector();
-      renderWorkoutSelector();
-      if (currentWorkoutId) renderWorkout(currentWorkoutId);
-      renderMeals();
-    });
-  }
+  const plan = getViewedPlan();
+  if (!plan) return;
   const editButton = document.getElementById("editWorkoutPlan");
   const viewingHistory = viewedWorkoutPlanId !== activeWorkoutPlanId;
-  editButton.disabled = viewingHistory;
-  editButton.innerHTML = viewingHistory
-    ? `<span data-icon="clipboard"></span> Somente leitura`
-    : `<span data-icon="edit"></span> Editar treino`;
-  hydrateIcons(editButton);
+  document.getElementById("currentPlanText").textContent = viewingHistory
+    ? `${plan.name} · iniciado em ${formatPlanDate(plan.createdAt)}`
+    : `Treino vigente desde ${formatPlanDate(plan.createdAt)}`;
+  editButton.setAttribute("aria-label", viewingHistory ? "Voltar ao treino vigente" : "Ver detalhes do treino vigente");
 }
 
 function bindCalendar() {
@@ -782,7 +770,9 @@ function renderWorkoutSelector() {
         <strong>${escapeHtml(getWorkoutName(workout))}</strong>
         <small>${escapeHtml(formatShortDate(workoutCompletionCache[workout.id]))}</small>
       </button>
-    `).join("");
+    `).join("") + (viewedWorkoutPlanId === activeWorkoutPlanId
+      ? `<button class="workout-segment-add" type="button" data-quick-add-section aria-label="Adicionar treino" title="Adicionar treino">+</button>`
+      : "");
 
   buttons.querySelectorAll("[data-workout-button]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -792,6 +782,10 @@ function renderWorkoutSelector() {
       renderWorkout(currentWorkoutId);
       renderMeals();
     });
+  });
+  buttons.querySelector("[data-quick-add-section]")?.addEventListener("click", () => {
+    openPlanEditor(false);
+    addDraftSection();
   });
 }
 
@@ -997,7 +991,13 @@ function openPlanEditor(isNew) {
       workouts: [{ id: sectionId, short: "Treino A", label: "Treino A", note: "", exercises: [] }]
     };
   } else {
-    if (viewedWorkoutPlanId !== activeWorkoutPlanId) return;
+    if (viewedWorkoutPlanId !== activeWorkoutPlanId) {
+      applyViewedPlan(activeWorkoutPlanId);
+      renderWorkoutPlanSelector();
+      renderWorkoutSelector();
+      currentWorkoutId = workouts[0]?.id || "";
+      if (currentWorkoutId) renderWorkout(currentWorkoutId);
+    }
     planEditorDraft = structuredClone(getActivePlan());
     planEditorDraft.isNew = false;
   }
@@ -1044,6 +1044,21 @@ function syncDraftFromEditor() {
 }
 
 function renderPlanEditor() {
+  const historySelect = document.getElementById("planHistorySelect");
+  historySelect.innerHTML = [...workoutPlans].reverse().map((plan) => `
+    <option value="${plan.id}">${escapeHtml(plan.name)}${plan.id === activeWorkoutPlanId ? " · vigente" : ""}</option>
+  `).join("");
+  historySelect.value = planEditorDraft.id;
+  historySelect.onchange = () => {
+    if (historySelect.value === activeWorkoutPlanId) return;
+    applyViewedPlan(historySelect.value);
+    currentWorkoutId = workouts[0]?.id || "";
+    closePlanEditor();
+    renderWorkoutPlanSelector();
+    renderWorkoutSelector();
+    if (currentWorkoutId) renderWorkout(currentWorkoutId);
+    renderMeals();
+  };
   const list = document.getElementById("sectionEditorList");
   list.innerHTML = planEditorDraft.workouts.map((section, sectionIndex) => `
     <article class="section-editor-card" data-section-card="${section.id}">
