@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#070807" />
     <title>Health Life</title>
-    <link rel="icon" href="/icons/health-life.svg" type="image/svg+xml" />
+    <link rel="icon" href="./icons/health-life.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/decovin/health-life/codex/iphone-icon/apple-touch-icon.png" />
     <link rel="apple-touch-icon-precomposed" sizes="180x180" href="https://raw.githubusercontent.com/decovin/health-life/codex/iphone-icon/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="/config.js"></script>
+    <script src="./config.js"></script>
   </head>
   <body>
     <div class="phone-shell">
@@ -77,9 +77,19 @@
         </section>
 
         <section class="view" id="trainingView">
-          <div class="screen-heading">
-            <p>Treino</p>
-            <h2>Pesos e máquinas</h2>
+          <div class="screen-heading training-heading">
+            <div>
+              <p>Treino</p>
+              <h2>Seu ciclo atual</h2>
+            </div>
+            <button class="new-plan-button" id="newWorkoutPlan" type="button"><span>+</span> Novo treino</button>
+          </div>
+          <div class="plan-toolbar">
+            <label>
+              <span>Ciclo de treino</span>
+              <select id="workoutPlanSelect" aria-label="Selecionar ciclo de treino"></select>
+            </label>
+            <button class="outline-action" id="editWorkoutPlan" type="button"><span data-icon="edit"></span> Editar treino</button>
           </div>
           <div class="training-controls">
             <span>Tipo de treino</span>
@@ -148,6 +158,35 @@
       </section>
     </div>
 
-    <script type="module" src="/app.js"></script>
+    <div class="plan-editor" id="planEditor" aria-hidden="true">
+      <div class="editor-backdrop" data-editor-close></div>
+      <section class="editor-panel" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+        <header class="editor-header">
+          <div>
+            <p id="editorEyebrow">Configurar treino</p>
+            <h2 id="editorTitle">Novo ciclo</h2>
+          </div>
+          <button class="editor-close" data-editor-close type="button" aria-label="Fechar">&times;</button>
+        </header>
+        <div class="editor-body">
+          <label class="editor-plan-name">
+            <span>Nome do ciclo</span>
+            <input id="planNameInput" maxlength="80" placeholder="Ex.: Hipertrofia · setembro" />
+          </label>
+          <div class="editor-intro">
+            <strong>Seções do treino</strong>
+            <p>Crie sua divisão e adicione quantos exercícios precisar.</p>
+          </div>
+          <div id="sectionEditorList"></div>
+          <button class="add-section-button" id="addWorkoutSection" type="button"><span>+</span> Adicionar seção</button>
+        </div>
+        <footer class="editor-footer">
+          <button class="secondary-action" data-editor-close type="button">Cancelar</button>
+          <button class="save-plan-button" id="saveWorkoutPlan" type="button">Salvar treino</button>
+        </footer>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
   </body>
 </html>

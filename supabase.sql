@@ -38,9 +38,13 @@ create table if not exists public.profile_settings (
   profile_id text not null,
   workout_names jsonb default '{}'::jsonb,
   exercise_names jsonb default '{}'::jsonb,
+  workout_plans jsonb default null,
   updated_at timestamptz default now(),
   primary key (profile_id)
 );
+
+alter table public.profile_settings
+add column if not exists workout_plans jsonb default null;
 
 alter table public.workout_exercise_notes enable row level security;
 alter table public.daily_checks enable row level security;

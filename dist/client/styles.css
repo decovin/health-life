@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: #070807;
+  --bg: #100a08;
   --panel: rgba(255, 255, 255, 0.075);
   --panel-strong: rgba(255, 255, 255, 0.12);
   --line: rgba(255, 255, 255, 0.16);
@@ -9,6 +9,9 @@
   --muted: #aaa7a2;
   --dim: #7f7b75;
   --orange: #ff8a12;
+  --red: #e84424;
+  --yellow: #ffc94a;
+  --cream: #fff4df;
   --orange-soft: rgba(255, 138, 18, 0.16);
   --shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
 }
@@ -26,8 +29,9 @@ body {
   min-height: 100vh;
   color: var(--text);
   background:
-    radial-gradient(circle at 14% 18%, rgba(255, 138, 18, 0.08), transparent 24rem),
-    linear-gradient(145deg, #0a0b0a 0%, #121211 48%, #060706 100%);
+    radial-gradient(circle at 10% 12%, rgba(255, 142, 32, 0.14), transparent 25rem),
+    radial-gradient(circle at 86% 35%, rgba(232, 68, 36, 0.08), transparent 30rem),
+    linear-gradient(145deg, #120b08 0%, #1a100c 48%, #0c0807 100%);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -1227,4 +1231,175 @@ textarea {
   .daily-total > span {
     display: none;
   }
+}
+
+/* Editor de ciclos: quente, tátil e deliberadamente menos "dashboard genérico". */
+.training-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.new-plan-button,
+.save-plan-button {
+  min-height: 48px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 20px;
+  color: #211008;
+  background: linear-gradient(135deg, var(--yellow), #ff8b22 58%, #f15a2a);
+  box-shadow: 0 12px 28px rgba(232, 68, 36, 0.23), inset 0 1px rgba(255,255,255,.4);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.new-plan-button span,
+.add-section-button span,
+.add-exercise-button span {
+  margin-right: 6px;
+  font-size: 22px;
+}
+
+.plan-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 22px 0 26px;
+  padding: 16px;
+  border: 1px solid rgba(255, 201, 74, .18);
+  border-radius: 18px;
+  background: linear-gradient(120deg, rgba(255,138,18,.1), rgba(255,255,255,.035));
+}
+
+.plan-toolbar label { flex: 1; }
+.plan-toolbar label > span,
+.editor-plan-name > span,
+.section-fields label > span,
+.exercise-editor-row label > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #c9b9aa;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.plan-toolbar select { width: 100%; }
+
+.outline-action {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255,138,18,.55);
+  border-radius: 999px;
+  padding: 0 16px;
+  color: #ffc16d;
+  background: rgba(255,138,18,.08);
+  font-weight: 800;
+  cursor: pointer;
+}
+.outline-action span { width: 18px; height: 18px; }
+.outline-action:disabled { color: var(--dim); border-color: var(--line); background: transparent; cursor: default; }
+
+.plan-editor {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: none;
+}
+.plan-editor.is-open { display: block; }
+.editor-backdrop { position: absolute; inset: 0; background: rgba(8,4,2,.78); backdrop-filter: blur(10px); }
+.editor-panel {
+  position: absolute;
+  inset: 4vh max(18px, calc((100vw - 1020px)/2));
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  border: 1px solid rgba(255,177,72,.25);
+  border-radius: 26px;
+  background: #17100d;
+  box-shadow: 0 30px 100px rgba(0,0,0,.65);
+}
+.editor-header,
+.editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 26px;
+  background: linear-gradient(100deg, rgba(232,68,36,.15), rgba(255,138,18,.06));
+}
+.editor-header { border-bottom: 1px solid var(--line-soft); }
+.editor-header p { margin: 0 0 5px; color: var(--orange); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.editor-header h2 { margin: 0; color: var(--cream); font-size: clamp(24px, 4vw, 34px); }
+.editor-close { width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: rgba(255,255,255,.04); font-size: 28px; cursor: pointer; }
+.editor-body { overflow-y: auto; padding: 26px; }
+.editor-plan-name input,
+.section-fields input,
+.exercise-editor-row input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 11px;
+  padding: 0 13px;
+  color: var(--text);
+  outline: none;
+  background: rgba(255,255,255,.045);
+}
+.editor-plan-name input { min-height: 54px; border-color: rgba(255,138,18,.35); font-size: 19px; font-weight: 800; }
+.editor-plan-name input:focus,
+.section-fields input:focus,
+.exercise-editor-row input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,138,18,.1); }
+.editor-intro { margin: 30px 0 14px; }
+.editor-intro strong { color: var(--cream); font-size: 19px; }
+.editor-intro p { margin: 4px 0 0; color: var(--muted); }
+.section-editor-card { margin-bottom: 18px; overflow: hidden; border: 1px solid var(--line); border-radius: 19px; background: rgba(255,255,255,.035); }
+.section-editor-heading { display: grid; grid-template-columns: 46px 1fr 40px; align-items: center; gap: 12px; padding: 15px 17px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(90deg, rgba(255,138,18,.12), transparent); }
+.section-index { color: var(--yellow); font: 900 22px/1 ui-monospace, monospace; }
+.section-editor-heading small { display: block; color: var(--red); font-size: 10px; font-weight: 900; letter-spacing: .13em; }
+.section-editor-heading strong { display: block; margin-top: 3px; font-size: 17px; }
+.remove-icon-button { display: grid; width: 38px; height: 38px; place-items: center; border: 0; border-radius: 10px; color: #dc775e; background: transparent; cursor: pointer; }
+.remove-icon-button:hover { background: rgba(232,68,36,.12); }
+.remove-icon-button span { width: 18px; height: 18px; }
+.section-fields { display: grid; grid-template-columns: .7fr 1.3fr; gap: 12px; padding: 16px; }
+.wide-field { grid-column: 1/-1; }
+.exercise-editor-list { display: grid; gap: 9px; padding: 0 16px; }
+.exercise-editor-row { display: grid; grid-template-columns: 30px minmax(180px,2fr) .55fr .7fr .7fr .6fr minmax(180px,1.5fr) 38px; align-items: end; gap: 8px; padding: 12px; border: 1px solid var(--line-soft); border-radius: 14px; background: rgba(0,0,0,.16); }
+.exercise-editor-row label,
+.exercise-editor-row input { min-width: 0; }
+.exercise-editor-number { align-self: center; color: var(--orange); font-weight: 900; }
+.exercise-remove { margin-bottom: 3px; }
+.add-exercise-button,
+.add-section-button { min-height: 44px; border: 1px dashed rgba(255,159,54,.55); border-radius: 12px; color: #ffb45c; background: rgba(255,138,18,.055); font-weight: 850; cursor: pointer; }
+.add-exercise-button { margin: 12px 16px 16px; padding: 0 16px; }
+.add-section-button { width: 100%; min-height: 54px; }
+.editor-footer { justify-content: flex-end; border-top: 1px solid var(--line-soft); }
+.editor-footer .secondary-action { width: auto; margin: 0; }
+body.editor-is-open { overflow: hidden; }
+
+@media (max-width: 800px) {
+  .editor-panel { inset: 0; border: 0; border-radius: 0; }
+  .exercise-editor-row { grid-template-columns: 28px 1fr 1fr 38px; }
+  .exercise-name-field, .exercise-notes-field { grid-column: 2/4; }
+  .exercise-remove { grid-column: 4; grid-row: 1; }
+}
+
+@media (max-width: 560px) {
+  .training-heading { align-items: flex-start; flex-direction: column; }
+  .new-plan-button { width: 100%; }
+  .plan-toolbar { align-items: stretch; flex-direction: column; }
+  .outline-action { justify-content: center; }
+  .editor-header, .editor-footer, .editor-body { padding: 18px; }
+  .section-fields { grid-template-columns: 1fr; }
+  .wide-field { grid-column: auto; }
+  .exercise-editor-row { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px 8px; padding: 12px; }
+  .exercise-editor-number { grid-column: 1; grid-row: 1; }
+  .exercise-name-field { grid-column: 1/-1; grid-row: 2; }
+  .exercise-notes-field { grid-column: 1/-1; }
+  .exercise-remove { grid-column: 2; grid-row: 1; justify-self: end; }
+  .exercise-editor-row label > span { font-size: 10px; letter-spacing: .04em; }
+  .editor-footer > button { flex: 1; }
 }

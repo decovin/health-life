@@ -14,6 +14,7 @@ const icons = {
   settings: '<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/><path d="M4 12H2M22 12h-2M12 4V2M12 22v-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
   user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></svg>',
   utensils: '<svg viewBox="0 0 24 24"><path d="M6 2v8M3 2v8c0 2 1.3 3 3 3s3-1 3-3V2M6 13v9"/><path d="M17 2v20M17 2c3 2.6 4 5.4 4 9h-4"/></svg>'
 };
 
@@ -253,8 +254,8 @@ const profiles = {
     meals: viniciusMeals,
     workouts: viniciusWorkouts,
     files: [
-      { label: "Dieta", name: "Dieta_Vinicius.pdf", href: "/Arquivos/Dieta_Vinicius.pdf" },
-      { label: "Treino", name: "Treino_vinicius.pdf", href: "/Arquivos/Treino_vinicius.pdf" }
+      { label: "Dieta", name: "Dieta_Vinicius.pdf", href: "./Arquivos/Dieta_Vinicius.pdf" },
+      { label: "Treino", name: "Treino_vinicius.pdf", href: "./Arquivos/Treino_vinicius.pdf" }
     ]
   },
   leticia: {
@@ -264,8 +265,8 @@ const profiles = {
     meals: leticiaMeals,
     workouts: leticiaWorkouts,
     files: [
-      { label: "Dieta", name: "Dieta_leticia.pdf", href: "/Arquivos/Dieta_leticia.pdf" },
-      { label: "Treino", name: "Treino_Leticia.pdf", href: "/Arquivos/Treino_Leticia.pdf" }
+      { label: "Dieta", name: "Dieta_leticia.pdf", href: "./Arquivos/Dieta_leticia.pdf" },
+      { label: "Treino", name: "Treino_Leticia.pdf", href: "./Arquivos/Treino_Leticia.pdf" }
     ]
   }
 };
@@ -277,7 +278,8 @@ const localKeys = {
   checks: (profileId, date) => `fitness:${profileId}:daily-checks:${date}`,
   workout: (profileId) => `fitness:${profileId}:selected-workout`,
   workoutForDate: (profileId, date) => `fitness:${profileId}:selected-workout:${date}`,
-  customNames: (profileId) => `fitness:${profileId}:custom-names`
+  customNames: (profileId) => `fitness:${profileId}:custom-names`,
+  workoutPlans: (profileId) => `fitness:${profileId}:workout-plans`
 };
 const dailyLogPrefix = (profileId) => `fitness:${profileId}:daily-exercise-logs:`;
 
@@ -288,6 +290,10 @@ let activeProfile = initialProfile;
 let profileId = activeProfile?.id || "vinicius";
 let meals = activeProfile?.meals || [];
 let workouts = activeProfile?.workouts || [];
+let workoutPlans = [];
+let activeWorkoutPlanId = "";
+let viewedWorkoutPlanId = "";
+let planEditorDraft = null;
 let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
@@ -328,7 +334,7 @@ function getExerciseName(exercise) {
 }
 
 function getStrengthWorkouts() {
-  return workouts.filter((workout) => !workout.label.toLowerCase().includes("cardio"));
+  return workouts;
 }
 
 function getWorkoutCompletionKey(workoutId) {
@@ -394,6 +400,7 @@ async function init() {
   bindNavigation();
   bindCalendar();
   bindChartModal();
+  bindPlanEditor();
   bindProfileSelection();
 
   if (!activeProfile) {
@@ -489,6 +496,7 @@ async function activateProfile(profileKey) {
 
 async function loadActiveProfile() {
   setSyncStatus("Carregando");
+  await loadWorkoutPlans();
   const [notes, , workoutId, checks, dailyLogs, latestWeights, completions] = await Promise.all([
     loadNotes(),
     loadCustomNames(),
@@ -507,6 +515,7 @@ async function loadActiveProfile() {
   renderDate();
   renderMeals();
   renderWorkoutSelector();
+  renderWorkoutPlanSelector();
   renderWorkout(currentWorkoutId);
   renderFiles();
   renderSettings();
@@ -540,6 +549,112 @@ function showTrainingEntry() {
   renderWorkout(currentWorkoutId);
   renderMeals();
   showMainView("training");
+}
+
+function createId(prefix) {
+  const suffix = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${suffix}`;
+}
+
+function cloneDefaultWorkouts() {
+  return activeProfile.workouts.map((workout) => ({
+    ...workout,
+    exercises: workout.exercises.map((exercise) => ({ ...exercise }))
+  }));
+}
+
+function getActivePlan() {
+  return workoutPlans.find((plan) => plan.id === activeWorkoutPlanId) || workoutPlans[workoutPlans.length - 1];
+}
+
+function getViewedPlan() {
+  return workoutPlans.find((plan) => plan.id === viewedWorkoutPlanId) || getActivePlan();
+}
+
+function applyViewedPlan(planId) {
+  const plan = workoutPlans.find((item) => item.id === planId) || getActivePlan();
+  if (!plan) return;
+  viewedWorkoutPlanId = plan.id;
+  workouts = plan.workouts;
+  if (!workouts.some((workout) => workout.id === currentWorkoutId)) currentWorkoutId = workouts[0]?.id || "";
+}
+
+async function loadWorkoutPlans() {
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(localKeys.workoutPlans(profileId)) || "null");
+  } catch {
+    saved = null;
+  }
+
+  if (supabaseClient) {
+    const { data } = await supabaseClient
+      .from("profile_settings")
+      .select("workout_plans")
+      .eq("profile_id", profileId)
+      .maybeSingle();
+    if (data?.workout_plans?.plans?.length) saved = data.workout_plans;
+  }
+
+  if (saved?.plans?.length) {
+    workoutPlans = saved.plans;
+    activeWorkoutPlanId = saved.activePlanId || workoutPlans[workoutPlans.length - 1].id;
+  } else {
+    const initialPlan = {
+      id: createId("plano"),
+      name: "Treino original",
+      createdAt: new Date().toISOString(),
+      workouts: cloneDefaultWorkouts()
+    };
+    workoutPlans = [initialPlan];
+    activeWorkoutPlanId = initialPlan.id;
+    persistWorkoutPlans();
+  }
+  viewedWorkoutPlanId = activeWorkoutPlanId;
+  applyViewedPlan(viewedWorkoutPlanId);
+}
+
+function persistWorkoutPlans() {
+  const payload = {
+    activePlanId: activeWorkoutPlanId,
+    plans: workoutPlans
+  };
+  localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify(payload));
+  if (supabaseClient) {
+    syncInBackground(supabaseClient.from("profile_settings").upsert({
+      profile_id: profileId,
+      workout_plans: payload,
+      updated_at: new Date().toISOString()
+    }));
+  }
+}
+
+function renderWorkoutPlanSelector() {
+  const select = document.getElementById("workoutPlanSelect");
+  if (!select) return;
+  select.innerHTML = [...workoutPlans].reverse().map((plan) => {
+    const isActive = plan.id === activeWorkoutPlanId;
+    return `<option value="${plan.id}">${escapeHtml(plan.name)}${isActive ? " · atual" : " · histórico"}</option>`;
+  }).join("");
+  select.value = viewedWorkoutPlanId;
+  if (select.dataset.bound !== "true") {
+    select.dataset.bound = "true";
+    select.addEventListener("change", () => {
+      applyViewedPlan(select.value);
+      currentWorkoutId = workouts[0]?.id || "";
+      renderWorkoutPlanSelector();
+      renderWorkoutSelector();
+      if (currentWorkoutId) renderWorkout(currentWorkoutId);
+      renderMeals();
+    });
+  }
+  const editButton = document.getElementById("editWorkoutPlan");
+  const viewingHistory = viewedWorkoutPlanId !== activeWorkoutPlanId;
+  editButton.disabled = viewingHistory;
+  editButton.innerHTML = viewingHistory
+    ? `<span data-icon="clipboard"></span> Somente leitura`
+    : `<span data-icon="edit"></span> Editar treino`;
+  hydrateIcons(editButton);
 }
 
 function bindCalendar() {
@@ -728,7 +843,7 @@ function renderWorkout(workoutId) {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
     const latest = latestWeightsCache[exercise.id] || {};
-    const weightValue = daily.weight || latest.weight || "";
+    const weightValue = daily.weight || latest.weight || exercise.defaultWeight || "";
     const exerciseName = getExerciseName(exercise);
     return `
       <tr>
@@ -737,7 +852,7 @@ function renderWorkout(workoutId) {
         <td>${exercise.series}</td>
         <td>${exercise.reps}</td>
         <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${weightValue}" placeholder="--" /></td>
-        <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${saved.machine || ""}" placeholder="--" /></td>
+        <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${saved.machine || exercise.defaultMachine || ""}" placeholder="--" /></td>
       </tr>
     `;
   }).join("");
@@ -747,7 +862,7 @@ function renderWorkout(workoutId) {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
     const latest = latestWeightsCache[exercise.id];
-    const weightValue = daily.weight || latest?.weight || "";
+    const weightValue = daily.weight || latest?.weight || exercise.defaultWeight || "";
     const exerciseName = getExerciseName(exercise);
     const isEditingName = editingExerciseId === exercise.id;
     return `
@@ -772,7 +887,7 @@ function renderWorkout(workoutId) {
           </label>
           <label>
             <span>Máquina</span>
-            <input data-note="${exercise.id}" data-field="machine" value="${saved.machine || ""}" placeholder="número" />
+            <input data-note="${exercise.id}" data-field="machine" value="${saved.machine || exercise.defaultMachine || ""}" placeholder="número" />
           </label>
           <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
             ${checksCache[exercise.id] ? "Feito" : "Não feito"}
@@ -783,7 +898,7 @@ function renderWorkout(workoutId) {
         </div>
         <label class="notes-field">
           <span>Observação</span>
-          <textarea data-note="${exercise.id}" data-field="notes" rows="2" placeholder="Ajuste de banco, pegada, ordem...">${saved.notes || ""}</textarea>
+          <textarea data-note="${exercise.id}" data-field="notes" rows="2" placeholder="Ajuste de banco, pegada, ordem...">${saved.notes || exercise.defaultNotes || ""}</textarea>
         </label>
       </article>
     `;
@@ -858,6 +973,176 @@ function bindWorkoutFields() {
       await toggleWorkoutComplete(button.dataset.workoutComplete);
     });
   });
+}
+
+function bindPlanEditor() {
+  document.getElementById("newWorkoutPlan").addEventListener("click", () => openPlanEditor(true));
+  document.getElementById("editWorkoutPlan").addEventListener("click", () => openPlanEditor(false));
+  document.getElementById("addWorkoutSection").addEventListener("click", addDraftSection);
+  document.getElementById("saveWorkoutPlan").addEventListener("click", savePlanEditor);
+  document.querySelectorAll("[data-editor-close]").forEach((button) => button.addEventListener("click", closePlanEditor));
+  document.getElementById("planEditor").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closePlanEditor();
+  });
+}
+
+function openPlanEditor(isNew) {
+  if (isNew) {
+    const sectionId = createId("secao");
+    planEditorDraft = {
+      isNew: true,
+      id: createId("plano"),
+      name: `Novo treino · ${new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date())}`,
+      createdAt: new Date().toISOString(),
+      workouts: [{ id: sectionId, short: "Treino A", label: "Treino A", note: "", exercises: [] }]
+    };
+  } else {
+    if (viewedWorkoutPlanId !== activeWorkoutPlanId) return;
+    planEditorDraft = structuredClone(getActivePlan());
+    planEditorDraft.isNew = false;
+  }
+  document.getElementById("editorEyebrow").textContent = isNew ? "Um novo começo" : "Ajustar ciclo atual";
+  document.getElementById("editorTitle").textContent = isNew ? "Monte seu novo treino" : "Edite todo o treino";
+  document.getElementById("planNameInput").value = planEditorDraft.name;
+  renderPlanEditor();
+  const modal = document.getElementById("planEditor");
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("editor-is-open");
+  setTimeout(() => document.getElementById("planNameInput").focus(), 30);
+}
+
+function closePlanEditor() {
+  const modal = document.getElementById("planEditor");
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("editor-is-open");
+  planEditorDraft = null;
+}
+
+function syncDraftFromEditor() {
+  if (!planEditorDraft) return;
+  planEditorDraft.name = document.getElementById("planNameInput").value;
+  document.querySelectorAll("[data-section-card]").forEach((card) => {
+    const section = planEditorDraft.workouts.find((item) => item.id === card.dataset.sectionCard);
+    if (!section) return;
+    section.short = card.querySelector('[data-section-field="short"]').value;
+    section.label = card.querySelector('[data-section-field="label"]').value;
+    section.note = card.querySelector('[data-section-field="note"]').value;
+    card.querySelectorAll("[data-draft-exercise]").forEach((row) => {
+      const exercise = section.exercises.find((item) => item.id === row.dataset.draftExercise);
+      if (!exercise) return;
+      exercise.name = row.querySelector('[data-exercise-field="name"]').value;
+      exercise.series = row.querySelector('[data-exercise-field="series"]').value;
+      exercise.reps = row.querySelector('[data-exercise-field="reps"]').value;
+      exercise.defaultWeight = row.querySelector('[data-exercise-field="defaultWeight"]').value;
+      exercise.defaultMachine = row.querySelector('[data-exercise-field="defaultMachine"]').value;
+      exercise.defaultNotes = row.querySelector('[data-exercise-field="defaultNotes"]').value;
+      exercise.target = `${exercise.series || "-"}x${exercise.reps || "-"}`;
+    });
+  });
+}
+
+function renderPlanEditor() {
+  const list = document.getElementById("sectionEditorList");
+  list.innerHTML = planEditorDraft.workouts.map((section, sectionIndex) => `
+    <article class="section-editor-card" data-section-card="${section.id}">
+      <div class="section-editor-heading">
+        <span class="section-index">${String(sectionIndex + 1).padStart(2, "0")}</span>
+        <div><small>SEÇÃO</small><strong>${escapeHtml(section.short || `Treino ${String.fromCharCode(65 + sectionIndex)}`)}</strong></div>
+        <button class="remove-icon-button" type="button" data-remove-section="${section.id}" aria-label="Excluir seção"><span data-icon="trash"></span></button>
+      </div>
+      <div class="section-fields">
+        <label><span>Nome curto</span><input data-section-field="short" value="${escapeHtml(section.short)}" placeholder="Treino A" /></label>
+        <label><span>Foco da seção</span><input data-section-field="label" value="${escapeHtml(section.label)}" placeholder="Peito e tríceps" /></label>
+        <label class="wide-field"><span>Orientação</span><input data-section-field="note" value="${escapeHtml(section.note || "")}" placeholder="Ex.: 30 min de cardio ao final" /></label>
+      </div>
+      <div class="exercise-editor-list">
+        ${section.exercises.map((exercise, index) => renderDraftExercise(exercise, index)).join("")}
+      </div>
+      <button class="add-exercise-button" type="button" data-add-exercise="${section.id}"><span>+</span> Adicionar exercício</button>
+    </article>
+  `).join("");
+  hydrateIcons(list);
+
+  list.querySelectorAll("[data-add-exercise]").forEach((button) => button.addEventListener("click", () => {
+    syncDraftFromEditor();
+    const section = planEditorDraft.workouts.find((item) => item.id === button.dataset.addExercise);
+    section.exercises.push({ id: createId("exercicio"), name: "", series: "3", reps: "12", target: "3x12", defaultWeight: "", defaultMachine: "", defaultNotes: "" });
+    renderPlanEditor();
+    const inputs = list.querySelectorAll('[data-exercise-field="name"]');
+    inputs[inputs.length - 1]?.focus();
+  }));
+  list.querySelectorAll("[data-remove-section]").forEach((button) => button.addEventListener("click", () => {
+    if (planEditorDraft.workouts.length === 1) return alert("O treino precisa ter pelo menos uma seção.");
+    syncDraftFromEditor();
+    planEditorDraft.workouts = planEditorDraft.workouts.filter((item) => item.id !== button.dataset.removeSection);
+    renderPlanEditor();
+  }));
+  list.querySelectorAll("[data-remove-exercise]").forEach((button) => button.addEventListener("click", () => {
+    syncDraftFromEditor();
+    const section = planEditorDraft.workouts.find((item) => item.exercises.some((exercise) => exercise.id === button.dataset.removeExercise));
+    section.exercises = section.exercises.filter((exercise) => exercise.id !== button.dataset.removeExercise);
+    renderPlanEditor();
+  }));
+}
+
+function renderDraftExercise(exercise, index) {
+  return `
+    <div class="exercise-editor-row" data-draft-exercise="${exercise.id}">
+      <div class="exercise-editor-number">${index + 1}</div>
+      <label class="exercise-name-field"><span>Exercício</span><input data-exercise-field="name" value="${escapeHtml(exercise.name)}" placeholder="Nome do exercício" /></label>
+      <label><span>Séries</span><input data-exercise-field="series" value="${escapeHtml(exercise.series)}" inputmode="numeric" placeholder="3" /></label>
+      <label><span>Repetições</span><input data-exercise-field="reps" value="${escapeHtml(exercise.reps)}" placeholder="12" /></label>
+      <label><span>Peso inicial</span><input data-exercise-field="defaultWeight" value="${escapeHtml(exercise.defaultWeight || "")}" placeholder="kg" /></label>
+      <label><span>Máquina</span><input data-exercise-field="defaultMachine" value="${escapeHtml(exercise.defaultMachine || "")}" placeholder="nº" /></label>
+      <label class="exercise-notes-field"><span>Observação</span><input data-exercise-field="defaultNotes" value="${escapeHtml(exercise.defaultNotes || "")}" placeholder="Banco, pegada, execução..." /></label>
+      <button class="remove-icon-button exercise-remove" type="button" data-remove-exercise="${exercise.id}" aria-label="Excluir exercício"><span data-icon="trash"></span></button>
+    </div>`;
+}
+
+function addDraftSection() {
+  syncDraftFromEditor();
+  const letter = String.fromCharCode(65 + planEditorDraft.workouts.length);
+  planEditorDraft.workouts.push({ id: createId("secao"), short: `Treino ${letter}`, label: `Treino ${letter}`, note: "", exercises: [] });
+  renderPlanEditor();
+  document.getElementById("sectionEditorList").lastElementChild?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function savePlanEditor() {
+  syncDraftFromEditor();
+  planEditorDraft.name = planEditorDraft.name.trim();
+  if (!planEditorDraft.name) return alert("Dê um nome ao ciclo de treino.");
+  const invalidSection = planEditorDraft.workouts.find((section) => !section.short.trim() || !section.label.trim());
+  if (invalidSection) return alert("Preencha o nome e o foco de todas as seções.");
+  const invalidExercise = planEditorDraft.workouts.flatMap((section) => section.exercises).find((exercise) => !exercise.name.trim());
+  if (invalidExercise) return alert("Preencha o nome de todos os exercícios adicionados.");
+
+  const savedPlan = { ...planEditorDraft };
+  delete savedPlan.isNew;
+  if (planEditorDraft.isNew) {
+    workoutPlans.push(savedPlan);
+    activeWorkoutPlanId = savedPlan.id;
+  } else {
+    workoutPlans = workoutPlans.map((plan) => plan.id === savedPlan.id ? savedPlan : plan);
+  }
+  viewedWorkoutPlanId = savedPlan.id;
+  savedPlan.workouts.forEach((workout) => {
+    delete customWorkoutNames[workout.id];
+    workout.exercises.forEach((exercise) => delete customExerciseNames[exercise.id]);
+  });
+  await persistCustomNames();
+  persistWorkoutPlans();
+  applyViewedPlan(savedPlan.id);
+  currentWorkoutId = workouts[0]?.id || "";
+  localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
+  if (currentWorkoutId) saveWorkoutForDate(currentWorkoutId);
+  closePlanEditor();
+  renderWorkoutPlanSelector();
+  renderWorkoutSelector();
+  if (currentWorkoutId) renderWorkout(currentWorkoutId);
+  renderMeals();
+  renderSettings();
 }
 
 function getNextWorkoutId() {
