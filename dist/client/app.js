@@ -824,7 +824,12 @@ function renderWorkoutTimeline() {
     button.addEventListener("click", () => selectDate(button.dataset.timelineDate));
   });
   requestAnimationFrame(() => {
-    timeline.querySelector(`[data-timeline-date="${selectedDate}"]`)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: selectedDate === today ? "end" : "center" });
+    const selectedDay = timeline.querySelector(`[data-timeline-date="${selectedDate}"]`);
+    if (!selectedDay) return;
+    const desiredLeft = selectedDate === today
+      ? selectedDay.offsetLeft - timeline.clientWidth + selectedDay.offsetWidth
+      : selectedDay.offsetLeft - (timeline.clientWidth - selectedDay.offsetWidth) / 2;
+    timeline.scrollTo({ left: Math.max(0, desiredLeft), behavior: "smooth" });
   });
 }
 
