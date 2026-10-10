@@ -1532,8 +1532,8 @@ textarea {
 .add-section-button { width: 100%; min-height: 54px; }
 .editor-footer { justify-content: flex-end; border-top: 1px solid var(--line-soft); }
 .editor-footer .secondary-action { width: auto; margin: 0; }
-.quiet-new-plan {
-  margin-right: auto;
+.quiet-new-plan,
+.quiet-import-plan {
   border: 0;
   padding: 8px 0;
   color: var(--muted);
@@ -1541,7 +1541,20 @@ textarea {
   font-size: 13px;
   cursor: pointer;
 }
-.quiet-new-plan:hover { color: var(--orange); }
+.quiet-import-plan { margin-right: 14px; }
+.quiet-new-plan { margin-right: auto; }
+.quiet-new-plan:hover,
+.quiet-import-plan:hover { color: var(--orange); }
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
 body.editor-is-open { overflow: hidden; }
 
 @media (max-width: 800px) {
@@ -1563,7 +1576,8 @@ body.editor-is-open { overflow: hidden; }
   .exercise-remove { grid-column: 2; grid-row: 1; justify-self: end; }
   .exercise-editor-row label > span { font-size: 10px; letter-spacing: .04em; }
   .editor-footer { flex-wrap: wrap; }
-  .editor-footer .quiet-new-plan { width: 100%; margin-right: 0; text-align: left; }
+  .editor-footer .quiet-new-plan,
+  .editor-footer .quiet-import-plan { flex: 1; margin-right: 0; text-align: left; }
   .editor-footer .secondary-action,
   .editor-footer .save-plan-button { flex: 1; }
 }

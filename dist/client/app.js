@@ -1099,12 +1099,156 @@ function bindWorkoutFields() {
 function bindPlanEditor() {
   document.getElementById("newWorkoutPlan").addEventListener("click", () => openPlanEditor(true));
   document.getElementById("editWorkoutPlan").addEventListener("click", () => openPlanEditor(false));
+  const csvInput = document.getElementById("workoutCsvInput");
+  document.getElementById("importWorkoutCsv").addEventListener("click", () => csvInput.click());
+  csvInput.addEventListener("change", async () => {
+    const file = csvInput.files?.[0];
+    csvInput.value = "";
+    if (file) await importWorkoutCsvFile(file);
+  });
   document.getElementById("addWorkoutSection").addEventListener("click", addDraftSection);
   document.getElementById("saveWorkoutPlan").addEventListener("click", savePlanEditor);
   document.querySelectorAll("[data-editor-close]").forEach((button) => button.addEventListener("click", closePlanEditor));
   document.getElementById("planEditor").addEventListener("keydown", (event) => {
     if (event.key === "Escape") closePlanEditor();
   });
+}
+
+function detectCsvDelimiter(text) {
+  const firstLine = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0] || "";
+  const count = (delimiter) => {
+    let quoted = false;
+    let total = 0;
+    for (let index = 0; index < firstLine.length; index += 1) {
+      if (firstLine[index] === '"') quoted = !quoted;
+      if (!quoted && firstLine[index] === delimiter) total += 1;
+    }
+    return total;
+  };
+  return count(";") > count(",") ? ";" : ",";
+}
+
+function parseCsv(text) {
+  const delimiter = detectCsvDelimiter(text);
+  const rows = [];
+  let row = [];
+  let field = "";
+  let quoted = false;
+  const source = text.replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (char === delimiter && !quoted) {
+      row.push(field.trim());
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && source[index + 1] === "\n") index += 1;
+      row.push(field.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  row.push(field.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function normalizeCsvHeader(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+function getCsvColumn(headers, aliases) {
+  return headers.findIndex((header) => aliases.includes(header));
+}
+
+function buildWorkoutPlanFromCsv(text, fileName) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) throw new Error("O CSV precisa ter um cabeçalho e pelo menos um exercício.");
+  const headers = rows[0].map(normalizeCsvHeader);
+  const columns = {
+    workout: getCsvColumn(headers, ["nome_treino", "treino", "secao", "divisao"]),
+    exercise: getCsvColumn(headers, ["exercicios", "exercicio", "nome_exercicio"]),
+    series: getCsvColumn(headers, ["series", "serie"]),
+    reps: getCsvColumn(headers, ["repeticoes", "repeticao", "reps"]),
+    notes: getCsvColumn(headers, ["observacao", "observacoes", "obs"])
+  };
+  if (columns.workout < 0 || columns.exercise < 0 || columns.series < 0 || columns.reps < 0 || columns.notes < 0) {
+    throw new Error("Use as colunas: nome_treino, exercicios, series, repeticoes e observacao.");
+  }
+
+  const sections = new Map();
+  rows.slice(1).forEach((values) => {
+    const workoutName = (values[columns.workout] || "").trim();
+    const exerciseName = (values[columns.exercise] || "").trim();
+    if (!workoutName || !exerciseName) return;
+    if (!sections.has(workoutName)) {
+      sections.set(workoutName, {
+        id: createId("secao"),
+        short: workoutName,
+        label: workoutName,
+        note: "",
+        exercises: []
+      });
+    }
+    const series = (values[columns.series] || "-").trim();
+    const reps = (values[columns.reps] || "-").trim();
+    sections.get(workoutName).exercises.push({
+      id: createId("exercicio"),
+      name: exerciseName,
+      series,
+      reps,
+      target: `${series}x${reps}`,
+      defaultWeight: "",
+      defaultMachine: "",
+      defaultNotes: (values[columns.notes] || "").trim()
+    });
+  });
+  if (!sections.size) throw new Error("Nenhum exercício válido foi encontrado no CSV.");
+  const cleanName = fileName.replace(/\.csv$/i, "").replace(/[_-]+/g, " ").trim();
+  return {
+    id: createId("plano"),
+    name: cleanName || `Treino importado · ${formatShortDate(today)}`,
+    createdAt: new Date().toISOString(),
+    workouts: [...sections.values()]
+  };
+}
+
+async function importWorkoutCsvFile(file) {
+  try {
+    const importedPlan = buildWorkoutPlanFromCsv(await file.text(), file.name);
+    workoutPlans.push(importedPlan);
+    activeWorkoutPlanId = importedPlan.id;
+    viewedWorkoutPlanId = importedPlan.id;
+    applyViewedPlan(importedPlan.id);
+    currentWorkoutId = workouts[0]?.id || "";
+    persistWorkoutPlans();
+    if (currentWorkoutId) await saveWorkoutForDate(currentWorkoutId);
+    closePlanEditor();
+    renderWorkoutPlanSelector();
+    renderWorkoutSelector();
+    if (currentWorkoutId) renderWorkout(currentWorkoutId);
+    renderMeals();
+    renderSettings();
+    alert(`Novo ciclo criado com ${workouts.length} ${workouts.length === 1 ? "treino" : "treinos"}.`);
+  } catch (error) {
+    alert(error.message || "Não foi possível importar o CSV.");
+  }
 }
 
 function openPlanEditor(isNew) {
@@ -1302,12 +1446,26 @@ function getNextWorkoutId() {
 
 async function toggleExerciseDone(exerciseId) {
   checksCache[exerciseId] = !checksCache[exerciseId];
+  const completionKey = getWorkoutCompletionKey(currentWorkoutId);
+  const shouldCompleteWorkout = checksCache[exerciseId] && !checksCache[completionKey];
+  if (shouldCompleteWorkout) {
+    checksCache[completionKey] = true;
+    if (!workoutCompletionCache[currentWorkoutId] || selectedDate > workoutCompletionCache[currentWorkoutId]) {
+      workoutCompletionCache[currentWorkoutId] = selectedDate;
+    }
+    timelineHistoryCache[selectedDate] ||= [];
+    if (!timelineHistoryCache[selectedDate].includes(currentWorkoutId)) timelineHistoryCache[selectedDate].push(currentWorkoutId);
+  }
   renderWorkout(currentWorkoutId);
   renderMeals();
-  syncInBackground(Promise.all([
+  renderWorkoutTimeline();
+  renderWorkoutSelector();
+  const syncTasks = [
     saveWorkoutForDate(currentWorkoutId),
     saveCheck(exerciseId, checksCache[exerciseId])
-  ]));
+  ];
+  if (shouldCompleteWorkout) syncTasks.push(saveCheck(completionKey, true));
+  syncInBackground(Promise.all(syncTasks));
 }
 
 async function toggleWorkoutComplete(workoutId) {
