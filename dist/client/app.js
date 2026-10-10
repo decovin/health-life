@@ -300,6 +300,7 @@ let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
 let latestWeightsCache = {};
+let machineSuggestedWeights = {};
 let workoutCompletionCache = {};
 let timelineHistoryCache = {};
 let customWorkoutNames = {};
@@ -342,6 +343,29 @@ function getStrengthWorkouts() {
 
 function getWorkoutCompletionKey(workoutId) {
   return `workout-done:${workoutId}`;
+}
+
+function normalizeMachine(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getMachineLogId(machine) {
+  return `machine:${encodeURIComponent(normalizeMachine(machine))}`;
+}
+
+function getLatestMachineWeight(machine, excludeExerciseId = "") {
+  const normalized = normalizeMachine(machine);
+  if (!normalized) return null;
+  const exact = latestWeightsCache[getMachineLogId(normalized)];
+  if (exact?.weight) return exact;
+
+  let latest = null;
+  Object.entries(notesCache).forEach(([exerciseId, note]) => {
+    if (exerciseId === excludeExerciseId || normalizeMachine(note.machine) !== normalized) return;
+    const candidate = latestWeightsCache[exerciseId];
+    if (candidate?.weight && (!latest || candidate.date > latest.date)) latest = candidate;
+  });
+  return latest;
 }
 
 function getLocalChecksPrefix() {
@@ -981,7 +1005,8 @@ function renderWorkout(workoutId) {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
     const latest = latestWeightsCache[exercise.id] || {};
-    const weightValue = daily.weight || latest.weight || exercise.defaultWeight || "";
+    const machineWeight = getLatestMachineWeight(saved.machine || exercise.defaultMachine);
+    const weightValue = daily.weight || machineSuggestedWeights[exercise.id] || machineWeight?.weight || latest.weight || exercise.defaultWeight || "";
     const exerciseName = getExerciseName(exercise);
     return `
       <tr>
@@ -1000,7 +1025,8 @@ function renderWorkout(workoutId) {
     const saved = notesCache[exercise.id] || {};
     const daily = dailyLogsCache[exercise.id] || {};
     const latest = latestWeightsCache[exercise.id];
-    const weightValue = daily.weight || latest?.weight || exercise.defaultWeight || "";
+    const machineWeight = getLatestMachineWeight(saved.machine || exercise.defaultMachine);
+    const weightValue = daily.weight || machineSuggestedWeights[exercise.id] || machineWeight?.weight || latest?.weight || exercise.defaultWeight || "";
     const exerciseName = getExerciseName(exercise);
     const isEditingName = editingExerciseId === exercise.id;
     return `
@@ -1463,6 +1489,7 @@ function getNextWorkoutId() {
 
 async function toggleExerciseDone(exerciseId) {
   checksCache[exerciseId] = !checksCache[exerciseId];
+  const suggestedWeight = checksCache[exerciseId] ? machineSuggestedWeights[exerciseId] : "";
   const completionKey = getWorkoutCompletionKey(currentWorkoutId);
   const shouldCompleteWorkout = checksCache[exerciseId] && !checksCache[completionKey];
   if (shouldCompleteWorkout) {
@@ -1481,6 +1508,7 @@ async function toggleExerciseDone(exerciseId) {
     saveWorkoutForDate(currentWorkoutId),
     saveCheck(exerciseId, checksCache[exerciseId])
   ];
+  if (suggestedWeight) syncTasks.push(saveDailyExerciseWeight(exerciseId, suggestedWeight));
   if (shouldCompleteWorkout) syncTasks.push(saveCheck(completionKey, true));
   syncInBackground(Promise.all(syncTasks));
 }
@@ -1746,8 +1774,21 @@ async function saveExerciseField(exerciseId, field, value) {
     return;
   }
 
+  const previousMachine = notesCache[exerciseId]?.machine || "";
   notesCache[exerciseId] = { ...(notesCache[exerciseId] || {}), [field]: value };
   localStorage.setItem(localKeys.notes(profileId), JSON.stringify(notesCache));
+
+  if (field === "machine") {
+    const latestMachineWeight = getLatestMachineWeight(value, normalizeMachine(previousMachine) === normalizeMachine(value) ? "" : exerciseId);
+    if (latestMachineWeight?.weight) {
+      machineSuggestedWeights[exerciseId] = latestMachineWeight.weight;
+      document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
+        input.value = latestMachineWeight.weight;
+      });
+    } else {
+      delete machineSuggestedWeights[exerciseId];
+    }
+  }
 
   if (field === "notes") {
     const exercise = findExercise(exerciseId);
@@ -1774,9 +1815,16 @@ async function saveExerciseField(exerciseId, field, value) {
 
 async function saveDailyExerciseWeight(exerciseId, weight) {
   dailyLogsCache[exerciseId] = { ...(dailyLogsCache[exerciseId] || {}), weight };
+  delete machineSuggestedWeights[exerciseId];
+  const machine = notesCache[exerciseId]?.machine || findExercise(exerciseId)?.defaultMachine || "";
+  const machineLogId = machine ? getMachineLogId(machine) : "";
+  if (machineLogId) dailyLogsCache[machineLogId] = { weight };
   localStorage.setItem(`${dailyLogPrefix(profileId)}${selectedDate}`, JSON.stringify(dailyLogsCache));
   if (weight && (!latestWeightsCache[exerciseId] || selectedDate >= latestWeightsCache[exerciseId].date)) {
     latestWeightsCache[exerciseId] = { date: selectedDate, weight };
+  }
+  if (machineLogId && weight && (!latestWeightsCache[machineLogId] || selectedDate >= latestWeightsCache[machineLogId].date)) {
+    latestWeightsCache[machineLogId] = { date: selectedDate, weight };
   }
   await saveWorkoutForDate(currentWorkoutId);
 
@@ -1785,13 +1833,21 @@ async function saveDailyExerciseWeight(exerciseId, weight) {
   });
 
   if (!supabaseClient) return;
-  await supabaseClient.from("daily_exercise_logs").upsert({
+  const records = [{
     profile_id: profileId,
     log_date: selectedDate,
     exercise_id: exerciseId,
     weight,
     updated_at: new Date().toISOString()
+  }];
+  if (machineLogId) records.push({
+    profile_id: profileId,
+    log_date: selectedDate,
+    exercise_id: machineLogId,
+    weight,
+    updated_at: new Date().toISOString()
   });
+  await supabaseClient.from("daily_exercise_logs").upsert(records);
 }
 
 async function saveCheck(itemId, completed) {
@@ -1820,14 +1876,15 @@ async function saveWorkoutForDate(workoutId) {
 async function openExerciseChart(exerciseId) {
   const exercise = findExercise(exerciseId);
   if (!exercise) return;
+  const machine = notesCache[exerciseId]?.machine || exercise.defaultMachine || "";
 
   const modal = document.getElementById("chartModal");
-  document.getElementById("chartTitle").textContent = getExerciseName(exercise);
+  document.getElementById("chartTitle").textContent = machine ? `Máquina ${machine}` : getExerciseName(exercise);
   document.getElementById("chartBody").innerHTML = `<p class="chart-empty">Carregando evolução...</p>`;
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
 
-  const history = await loadExerciseHistory(exerciseId);
+  const history = machine ? await loadMachineHistory(machine) : await loadExerciseHistory(exerciseId);
   document.getElementById("chartBody").innerHTML = renderChart(history);
 }
 
@@ -1839,6 +1896,48 @@ function closeExerciseChart() {
 
 function findExercise(exerciseId) {
   return workouts.flatMap((workout) => workout.exercises).find((exercise) => exercise.id === exerciseId);
+}
+
+function getExerciseIdsForMachine(machine) {
+  const normalized = normalizeMachine(machine);
+  const ids = new Set([getMachineLogId(normalized)]);
+  workoutPlans.forEach((plan) => {
+    plan.workouts.forEach((workout) => {
+      workout.exercises.forEach((exercise) => {
+        const exerciseMachine = notesCache[exercise.id]?.machine || exercise.defaultMachine || "";
+        if (normalizeMachine(exerciseMachine) === normalized) ids.add(exercise.id);
+      });
+    });
+  });
+  return [...ids];
+}
+
+function mergeWeightHistory(...collections) {
+  const unique = new Map();
+  collections.flat().forEach((item) => {
+    if (!Number.isFinite(item.weight)) return;
+    unique.set(`${item.date}:${item.weight}`, item);
+  });
+  return [...unique.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function loadMachineHistory(machine) {
+  const exerciseIds = getExerciseIdsForMachine(machine);
+  const localHistory = exerciseIds.flatMap(loadLocalExerciseHistory);
+  if (!supabaseClient) return mergeWeightHistory(localHistory);
+
+  const { data, error } = await supabaseClient
+    .from("daily_exercise_logs")
+    .select("exercise_id, log_date, weight")
+    .eq("profile_id", profileId)
+    .in("exercise_id", exerciseIds)
+    .order("log_date", { ascending: true });
+  if (error) return mergeWeightHistory(localHistory);
+  const remoteHistory = data.map((item) => ({
+    date: item.log_date,
+    weight: normalizeWeight(item.weight)
+  }));
+  return mergeWeightHistory(localHistory, remoteHistory);
 }
 
 async function loadExerciseHistory(exerciseId) {
