@@ -294,6 +294,8 @@ let workoutPlans = [];
 let activeWorkoutPlanId = "";
 let viewedWorkoutPlanId = "";
 let planEditorDraft = null;
+let workoutPlansNeedBootstrapSync = false;
+let workoutPlansUpdatedAt = "";
 let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
@@ -408,6 +410,7 @@ async function init() {
   bindChartModal();
   bindPlanEditor();
   bindProfileSelection();
+  window.addEventListener("focus", refreshWorkoutPlansFromRemote);
 
   if (!activeProfile) {
     showProfileSelector();
@@ -518,6 +521,10 @@ async function loadActiveProfile() {
   dailyLogsCache = dailyLogs;
   latestWeightsCache = latestWeights;
   workoutCompletionCache = completions;
+  if (workoutPlansNeedBootstrapSync) {
+    persistWorkoutPlans();
+    workoutPlansNeedBootstrapSync = false;
+  }
   renderDate();
   renderMeals();
   renderWorkoutSelector();
@@ -570,6 +577,23 @@ function cloneDefaultWorkouts() {
   }));
 }
 
+function hasLocalWorkoutCustomization(saved) {
+  if (!saved?.plans?.length) return false;
+  if (saved.plans.length !== 1) return true;
+  const localWorkouts = saved.plans[0].workouts || [];
+  const defaults = activeProfile.workouts;
+  if (localWorkouts.length !== defaults.length) return true;
+  return localWorkouts.some((workout, index) => {
+    const original = defaults[index];
+    if (!original || workout.id !== original.id || workout.short !== original.short || workout.label !== original.label) return true;
+    if ((workout.exercises || []).length !== original.exercises.length) return true;
+    return workout.exercises.some((exercise, exerciseIndex) => {
+      const originalExercise = original.exercises[exerciseIndex];
+      return !originalExercise || exercise.id !== originalExercise.id || exercise.name !== originalExercise.name || exercise.target !== originalExercise.target;
+    });
+  });
+}
+
 function getActivePlan() {
   return workoutPlans.find((plan) => plan.id === activeWorkoutPlanId) || workoutPlans[workoutPlans.length - 1];
 }
@@ -595,17 +619,25 @@ async function loadWorkoutPlans() {
   }
 
   if (supabaseClient) {
-    const { data } = await supabaseClient
+    const { data, error } = await supabaseClient
       .from("profile_settings")
-      .select("workout_plans")
+      .select("workout_names")
       .eq("profile_id", profileId)
       .maybeSingle();
-    if (data?.workout_plans?.plans?.length) saved = data.workout_plans;
+    const remotePlans = data?.workout_names?.__workout_plans;
+    if (!error && remotePlans?.plans?.length) {
+      saved = remotePlans;
+    } else if (!error && hasLocalWorkoutCustomization(saved)) {
+      // A customização local deve inaugurar a cópia compartilhada; o plano
+      // padrão isolado de outro aparelho não pode sobrescrevê-la.
+      workoutPlansNeedBootstrapSync = true;
+    }
   }
 
   if (saved?.plans?.length) {
     workoutPlans = saved.plans;
     activeWorkoutPlanId = saved.activePlanId || workoutPlans[workoutPlans.length - 1].id;
+    workoutPlansUpdatedAt = saved.updatedAt || "";
   } else {
     const initialPlan = {
       id: createId("plano"),
@@ -615,25 +647,57 @@ async function loadWorkoutPlans() {
     };
     workoutPlans = [initialPlan];
     activeWorkoutPlanId = initialPlan.id;
-    persistWorkoutPlans();
+    workoutPlansUpdatedAt = new Date().toISOString();
+    persistWorkoutPlans(false);
   }
   viewedWorkoutPlanId = activeWorkoutPlanId;
   applyViewedPlan(viewedWorkoutPlanId);
+  localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify({
+    activePlanId: activeWorkoutPlanId,
+    plans: workoutPlans,
+    updatedAt: workoutPlansUpdatedAt || new Date().toISOString()
+  }));
 }
 
-function persistWorkoutPlans() {
+function persistWorkoutPlans(syncRemote = true) {
+  workoutPlansUpdatedAt = new Date().toISOString();
   const payload = {
     activePlanId: activeWorkoutPlanId,
-    plans: workoutPlans
+    plans: workoutPlans,
+    updatedAt: workoutPlansUpdatedAt
   };
   localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify(payload));
-  if (supabaseClient) {
+  if (supabaseClient && syncRemote) {
     syncInBackground(supabaseClient.from("profile_settings").upsert({
       profile_id: profileId,
-      workout_plans: payload,
+      workout_names: { ...customWorkoutNames, __workout_plans: payload },
       updated_at: new Date().toISOString()
     }));
   }
+}
+
+async function refreshWorkoutPlansFromRemote() {
+  if (!supabaseClient || !activeProfile || planEditorDraft) return;
+  const { data, error } = await supabaseClient
+    .from("profile_settings")
+    .select("workout_names")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  const remotePlans = data?.workout_names?.__workout_plans;
+  if (error || !remotePlans?.plans?.length || !remotePlans.updatedAt || remotePlans.updatedAt <= workoutPlansUpdatedAt) return;
+
+  workoutPlans = remotePlans.plans;
+  activeWorkoutPlanId = remotePlans.activePlanId || workoutPlans[workoutPlans.length - 1].id;
+  viewedWorkoutPlanId = activeWorkoutPlanId;
+  workoutPlansUpdatedAt = remotePlans.updatedAt;
+  applyViewedPlan(activeWorkoutPlanId);
+  currentWorkoutId = workouts.some((workout) => workout.id === currentWorkoutId) ? currentWorkoutId : workouts[0]?.id || "";
+  localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify(remotePlans));
+  renderWorkoutPlanSelector();
+  renderWorkoutSelector();
+  if (currentWorkoutId) renderWorkout(currentWorkoutId);
+  renderMeals();
+  renderSettings();
 }
 
 function renderWorkoutPlanSelector() {
@@ -1281,7 +1345,9 @@ async function loadCustomNames() {
     .maybeSingle();
 
   if (error || !data) return;
-  customWorkoutNames = data.workout_names || customWorkoutNames;
+  const remoteWorkoutNames = { ...(data.workout_names || customWorkoutNames) };
+  delete remoteWorkoutNames.__workout_plans;
+  customWorkoutNames = remoteWorkoutNames;
   customExerciseNames = data.exercise_names || customExerciseNames;
   localStorage.setItem(localKeys.customNames(profileId), JSON.stringify({
     workouts: customWorkoutNames,
@@ -1296,9 +1362,14 @@ async function persistCustomNames() {
   }));
 
   if (!supabaseClient) return;
+  const plansPayload = {
+    activePlanId: activeWorkoutPlanId,
+    plans: workoutPlans,
+    updatedAt: new Date().toISOString()
+  };
   await supabaseClient.from("profile_settings").upsert({
     profile_id: profileId,
-    workout_names: customWorkoutNames,
+    workout_names: { ...customWorkoutNames, __workout_plans: plansPayload },
     exercise_names: customExerciseNames,
     updated_at: new Date().toISOString()
   });
