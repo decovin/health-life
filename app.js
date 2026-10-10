@@ -521,6 +521,7 @@ async function loadActiveProfile() {
   dailyLogsCache = dailyLogs;
   latestWeightsCache = latestWeights;
   workoutCompletionCache = completions;
+  applyQuickEditsToWorkoutPlans();
   if (workoutPlansNeedBootstrapSync) {
     persistWorkoutPlans();
     workoutPlansNeedBootstrapSync = false;
@@ -534,6 +535,17 @@ async function loadActiveProfile() {
   renderFiles();
   renderSettings();
   setSyncStatus(supabaseClient ? "Supabase" : "Local");
+}
+
+function applyQuickEditsToWorkoutPlans() {
+  workoutPlans.forEach((plan) => {
+    plan.workouts.forEach((workout) => {
+      workout.exercises.forEach((exercise) => {
+        if (customExerciseNames[exercise.id]) exercise.name = customExerciseNames[exercise.id];
+        if (notesCache[exercise.id]?.notes) exercise.defaultNotes = notesCache[exercise.id].notes;
+      });
+    });
+  });
 }
 
 function showProfileSelector() {
@@ -1570,12 +1582,10 @@ async function saveExerciseName(exerciseId, value) {
   const exercise = findExercise(exerciseId);
   if (!exercise) return;
   const name = value.trim();
-  if (!name || name === exercise.name) {
-    delete customExerciseNames[exerciseId];
-  } else {
-    customExerciseNames[exerciseId] = name;
-  }
+  if (name) exercise.name = name;
+  delete customExerciseNames[exerciseId];
   editingExerciseId = "";
+  persistWorkoutPlans(false);
   await persistCustomNames();
   renderWorkout(currentWorkoutId);
 }
@@ -1738,6 +1748,14 @@ async function saveExerciseField(exerciseId, field, value) {
 
   notesCache[exerciseId] = { ...(notesCache[exerciseId] || {}), [field]: value };
   localStorage.setItem(localKeys.notes(profileId), JSON.stringify(notesCache));
+
+  if (field === "notes") {
+    const exercise = findExercise(exerciseId);
+    if (exercise) {
+      exercise.defaultNotes = value;
+      persistWorkoutPlans();
+    }
+  }
 
   document.querySelectorAll(`[data-note="${exerciseId}"][data-field="${field}"]`).forEach((input) => {
     if (input.value !== value) input.value = value;
