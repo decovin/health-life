@@ -80,7 +80,7 @@
           <div class="screen-heading training-heading">
             <div>
               <p>Treino</p>
-              <h2>Seu ciclo atual</h2>
+              <h2>Um treino de cada vez.</h2>
             </div>
           </div>
           <section class="workout-timeline" aria-labelledby="timelineTitle">
@@ -89,16 +89,20 @@
               <small id="timelineSummary">0 nos últimos 7 dias</small>
             </div>
             <div class="timeline-scroll" id="workoutTimeline" aria-label="Histórico dos últimos 30 dias"></div>
-            <p class="timeline-day-detail" id="timelineDayDetail"></p>
+            <p class="timeline-day-detail" id="timelineDayDetail"></p><div class="day-sessions" id="daySessions" aria-label="Treinos registrados no dia"></div>
           </section>
           <div class="plan-toolbar">
+            <label class="program-picker"><span>Programa de treino</span><select id="trainingPlanSelect" aria-label="Selecionar programa de treino"></select></label>
             <button class="plan-context-button" id="editWorkoutPlan" type="button">
               <span id="currentPlanText">Treino vigente</span>
-              <span class="plan-context-arrow">›</span>
+              <span class="plan-context-arrow">↗</span>
             </button>
           </div>
+          <div class="program-actions"><button id="createWorkoutPlan" type="button">+ Novo programa</button><button id="deleteWorkoutPlan" type="button">Excluir programa</button></div>
+          <p class="plan-context" id="planContext"></p>
+          <p class="visually-hidden" id="reorderStatus" role="status"></p>
           <div class="training-controls">
-            <span>Tipo de treino</span>
+            <div class="day-order-heading"><span>Dias de treino</span><div><button id="moveWorkoutEarlier" type="button" aria-label="Mover treino selecionado para antes">←</button><button id="moveWorkoutLater" type="button" aria-label="Mover treino selecionado para depois">→</button></div></div>
             <div class="workout-segments" id="trainingWorkoutButtons" aria-label="Selecionar tipo de treino"></div>
           </div>
           <div class="exercise-list" id="exerciseList"></div>
@@ -148,20 +152,6 @@
           <strong>Ajustes</strong>
         </button>
       </nav>
-    </div>
-
-    <div class="chart-modal" id="chartModal" aria-hidden="true">
-      <div class="chart-backdrop" data-chart-close></div>
-      <section class="chart-panel" role="dialog" aria-modal="true" aria-labelledby="chartTitle">
-        <div class="chart-heading">
-          <div>
-            <p>Evolução de carga</p>
-            <h2 id="chartTitle">Exercício</h2>
-          </div>
-          <button class="chart-close" data-chart-close type="button" aria-label="Fechar gráfico">&times;</button>
-        </div>
-        <div class="chart-body" id="chartBody"></div>
-      </section>
     </div>
 
     <div class="plan-editor" id="planEditor" aria-hidden="true">

@@ -43,6 +43,9 @@ create table if not exists public.profile_settings (
   primary key (profile_id)
 );
 
+-- App v2 stores versioned plans, deletion markers and daily workout snapshots
+-- in workout_plans. Older clients only write workout_names and cannot erase it.
+-- This migration is idempotent; prepare it before the future online rollout.
 alter table public.profile_settings
 add column if not exists workout_plans jsonb default null;
 

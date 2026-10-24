@@ -291,6 +291,9 @@ let profileId = activeProfile?.id || "vinicius";
 let meals = activeProfile?.meals || [];
 let workouts = activeProfile?.workouts || [];
 let workoutPlans = [];
+let workoutSessions = {};
+const expandedCharts = new Set();
+let historicalSession = null;
 let activeWorkoutPlanId = "";
 let viewedWorkoutPlanId = "";
 let planEditorDraft = null;
@@ -300,7 +303,7 @@ let notesCache = {};
 let checksCache = {};
 let dailyLogsCache = {};
 let latestWeightsCache = {};
-let machineSuggestedWeights = {};
+let settingsSyncQueue = Promise.resolve();
 let workoutCompletionCache = {};
 let timelineHistoryCache = {};
 let customWorkoutNames = {};
@@ -326,14 +329,17 @@ function escapeHtml(value = "") {
 }
 
 function getWorkoutName(workout) {
+  if (historicalSession?.workout.id === workout.id) return workout.short;
   return customWorkoutNames[workout.id] || workout.short;
 }
 
 function getWorkoutLabel(workout) {
+  if (historicalSession?.workout.id === workout.id) return workout.label;
   return customWorkoutNames[workout.id] || workout.label;
 }
 
 function getExerciseName(exercise) {
+  if (historicalSession?.workout.exercises.some((item) => item.id === exercise.id)) return exercise.name;
   return customExerciseNames[exercise.id] || exercise.name;
 }
 
@@ -343,29 +349,6 @@ function getStrengthWorkouts() {
 
 function getWorkoutCompletionKey(workoutId) {
   return `workout-done:${workoutId}`;
-}
-
-function normalizeMachine(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function getMachineLogId(machine) {
-  return `machine:${encodeURIComponent(normalizeMachine(machine))}`;
-}
-
-function getLatestMachineWeight(machine, excludeExerciseId = "") {
-  const normalized = normalizeMachine(machine);
-  if (!normalized) return null;
-  const exact = latestWeightsCache[getMachineLogId(normalized)];
-  if (exact?.weight) return exact;
-
-  let latest = null;
-  Object.entries(notesCache).forEach(([exerciseId, note]) => {
-    if (exerciseId === excludeExerciseId || normalizeMachine(note.machine) !== normalized) return;
-    const candidate = latestWeightsCache[exerciseId];
-    if (candidate?.weight && (!latest || candidate.date > latest.date)) latest = candidate;
-  });
-  return latest;
 }
 
 function getLocalChecksPrefix() {
@@ -408,6 +391,9 @@ function parseIsoDate(date) {
 }
 
 function createSupabaseClient() {
+  // Local previews never write to the production database.
+  const host = location.hostname;
+  if (["localhost", "127.0.0.1", "[::1]", ""].includes(host) || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) || host.endsWith(".local")) return null;
   const url = window.FITNESS_CONFIG?.SUPABASE_URL;
   const key = window.FITNESS_CONFIG?.SUPABASE_ANON_KEY;
   if (!url || !key || !window.supabase) return null;
@@ -431,7 +417,6 @@ async function init() {
   renderDate();
   bindNavigation();
   bindCalendar();
-  bindChartModal();
   bindPlanEditor();
   bindProfileSelection();
   window.addEventListener("focus", refreshWorkoutPlansFromRemote);
@@ -447,7 +432,7 @@ async function init() {
 }
 
 function syncInBackground(promise) {
-  Promise.resolve(promise).catch((error) => {
+  Promise.resolve(promise).then((result) => { if (result?.error) throw result.error; }).catch((error) => {
     console.warn("Falha na sincronização; os dados continuam salvos neste dispositivo.", error);
     setSyncStatus("Local (sincronização pendente)");
   });
@@ -498,12 +483,20 @@ function bindNavigation() {
 
   document.getElementById("resetMeals").addEventListener("click", async () => {
     checksCache = {};
+    Object.values(workoutSessions[selectedDate] || {}).forEach((session) => {
+      session.completed = false; session.checks = Object.fromEntries(session.workout.exercises.map((e) => [e.id, false]));
+    });
+    persistWorkoutPlans();
+    workoutCompletionCache = {};
     localStorage.removeItem(localKeys.checks(profileId, selectedDate));
     renderMeals();
     renderWorkout(currentWorkoutId);
     if (supabaseClient) {
-      syncInBackground(supabaseClient.from("daily_checks").delete().eq("profile_id", profileId).eq("check_date", selectedDate));
+      const { error } = await supabaseClient.from("daily_checks").delete().eq("profile_id", profileId).eq("check_date", selectedDate);
+      if (error) { setSyncStatus("Local (sincronização pendente)"); return; }
     }
+    workoutCompletionCache = await loadWorkoutCompletions();
+    renderWorkoutTimeline(); renderWorkoutSelector();
   });
 }
 
@@ -517,6 +510,7 @@ function bindProfileSelection() {
 }
 
 async function activateProfile(profileKey) {
+  expandedCharts.clear();
   activeProfile = profiles[profileKey] || profiles.vinicius;
   activeProfileId = activeProfile.id;
   profileId = activeProfile.id;
@@ -546,6 +540,10 @@ async function loadActiveProfile() {
   latestWeightsCache = latestWeights;
   workoutCompletionCache = completions;
   applyQuickEditsToWorkoutPlans();
+  const savedPlan = findPlanForWorkout(currentWorkoutId);
+  if (savedPlan && (!savedPlan.deletedAt || workoutSessions[selectedDate]?.[currentWorkoutId])) applyViewedPlan(savedPlan.id);
+  else if (savedPlan?.deletedAt) applyViewedPlan(activeWorkoutPlanId);
+  restoreSession(currentWorkoutId);
   if (workoutPlansNeedBootstrapSync) {
     persistWorkoutPlans();
     workoutPlansNeedBootstrapSync = false;
@@ -566,7 +564,7 @@ function applyQuickEditsToWorkoutPlans() {
     plan.workouts.forEach((workout) => {
       workout.exercises.forEach((exercise) => {
         if (customExerciseNames[exercise.id]) exercise.name = customExerciseNames[exercise.id];
-        if (notesCache[exercise.id]?.notes) exercise.defaultNotes = notesCache[exercise.id].notes;
+        if (!plan.deletedAt && notesCache[exercise.id]?.notes) exercise.defaultNotes = notesCache[exercise.id].notes;
       });
     });
   });
@@ -594,7 +592,7 @@ function showMainView(viewName) {
 }
 
 function showTrainingEntry() {
-  currentWorkoutId = getNextWorkoutId();
+  if (!workouts.some((workout) => workout.id === currentWorkoutId)) currentWorkoutId = getNextWorkoutId();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
   renderMeals();
@@ -614,7 +612,9 @@ function cloneDefaultWorkouts() {
 }
 
 function hasLocalWorkoutCustomization(saved) {
-  if (!saved?.plans?.length) return false;
+  if (!Array.isArray(saved?.plans)) return false;
+  if (saved.schemaVersion >= 2 || Object.keys(saved.sessions || {}).length) return true;
+  if (!saved.plans.length) return false;
   if (saved.plans.length !== 1) return true;
   const localWorkouts = saved.plans[0].workouts || [];
   const defaults = activeProfile.workouts;
@@ -631,7 +631,7 @@ function hasLocalWorkoutCustomization(saved) {
 }
 
 function getActivePlan() {
-  return workoutPlans.find((plan) => plan.id === activeWorkoutPlanId) || workoutPlans[workoutPlans.length - 1];
+  return workoutPlans.find((plan) => plan.id === activeWorkoutPlanId && !plan.deletedAt) || livePlans().at(-1);
 }
 
 function getViewedPlan() {
@@ -640,7 +640,8 @@ function getViewedPlan() {
 
 function applyViewedPlan(planId) {
   const plan = workoutPlans.find((item) => item.id === planId) || getActivePlan();
-  if (!plan) return;
+  if (!plan) { workouts = []; viewedWorkoutPlanId = ""; currentWorkoutId = ""; return; }
+  historicalSession = null;
   viewedWorkoutPlanId = plan.id;
   workouts = plan.workouts;
   if (!workouts.some((workout) => workout.id === currentWorkoutId)) currentWorkoutId = workouts[0]?.id || "";
@@ -650,6 +651,8 @@ async function loadWorkoutPlans() {
   let saved = null;
   try {
     saved = JSON.parse(localStorage.getItem(localKeys.workoutPlans(profileId)) || "null");
+    const backupKey = `${localKeys.workoutPlans(profileId)}:backup-v1`;
+    if (saved && !saved.schemaVersion && !localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify(saved));
   } catch {
     saved = null;
   }
@@ -657,11 +660,11 @@ async function loadWorkoutPlans() {
   if (supabaseClient) {
     const { data, error } = await supabaseClient
       .from("profile_settings")
-      .select("workout_names")
+      .select("workout_names, workout_plans")
       .eq("profile_id", profileId)
       .maybeSingle();
-    const remotePlans = data?.workout_names?.__workout_plans;
-    if (!error && remotePlans?.plans?.length) {
+    const remotePlans = data?.workout_plans || data?.workout_names?.__workout_plans;
+    if (!error && Array.isArray(remotePlans?.plans) && (!saved?.updatedAt || remotePlans.updatedAt >= saved.updatedAt)) {
       saved = remotePlans;
     } else if (!error && hasLocalWorkoutCustomization(saved)) {
       // A customização local deve inaugurar a cópia compartilhada; o plano
@@ -670,9 +673,10 @@ async function loadWorkoutPlans() {
     }
   }
 
-  if (saved?.plans?.length) {
+  if (Array.isArray(saved?.plans)) {
     workoutPlans = saved.plans;
-    activeWorkoutPlanId = saved.activePlanId || workoutPlans[workoutPlans.length - 1].id;
+    workoutSessions = saved.sessions || {};
+    activeWorkoutPlanId = saved.activePlanId || livePlans().at(-1)?.id || "";
     workoutPlansUpdatedAt = saved.updatedAt || "";
   } else {
     const initialPlan = {
@@ -682,6 +686,7 @@ async function loadWorkoutPlans() {
       workouts: cloneDefaultWorkouts()
     };
     workoutPlans = [initialPlan];
+    workoutSessions = {};
     activeWorkoutPlanId = initialPlan.id;
     workoutPlansUpdatedAt = new Date().toISOString();
     persistWorkoutPlans(false);
@@ -691,6 +696,8 @@ async function loadWorkoutPlans() {
   localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify({
     activePlanId: activeWorkoutPlanId,
     plans: workoutPlans,
+    schemaVersion: 2,
+    sessions: workoutSessions,
     updatedAt: workoutPlansUpdatedAt || new Date().toISOString()
   }));
 }
@@ -700,51 +707,56 @@ function persistWorkoutPlans(syncRemote = true) {
   const payload = {
     activePlanId: activeWorkoutPlanId,
     plans: workoutPlans,
+    schemaVersion: 2,
+    sessions: workoutSessions,
     updatedAt: workoutPlansUpdatedAt
   };
   localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify(payload));
-  if (supabaseClient && syncRemote) {
-    syncInBackground(supabaseClient.from("profile_settings").upsert({
-      profile_id: profileId,
-      workout_names: { ...customWorkoutNames, __workout_plans: payload },
-      updated_at: new Date().toISOString()
-    }));
-  }
+  if (supabaseClient && syncRemote) syncInBackground(syncProfileSettings(payload));
 }
 
 async function refreshWorkoutPlansFromRemote() {
   if (!supabaseClient || !activeProfile || planEditorDraft) return;
   const { data, error } = await supabaseClient
     .from("profile_settings")
-    .select("workout_names")
+    .select("workout_names, workout_plans")
     .eq("profile_id", profileId)
     .maybeSingle();
-  const remotePlans = data?.workout_names?.__workout_plans;
-  if (error || !remotePlans?.plans?.length || !remotePlans.updatedAt || remotePlans.updatedAt <= workoutPlansUpdatedAt) return;
+  const remotePlans = data?.workout_plans || data?.workout_names?.__workout_plans;
+  if (error || !Array.isArray(remotePlans?.plans) || !remotePlans.updatedAt || remotePlans.updatedAt <= workoutPlansUpdatedAt) return;
 
   workoutPlans = remotePlans.plans;
-  activeWorkoutPlanId = remotePlans.activePlanId || workoutPlans[workoutPlans.length - 1].id;
-  viewedWorkoutPlanId = activeWorkoutPlanId;
+  workoutSessions = remotePlans.sessions || {};
+  activeWorkoutPlanId = remotePlans.activePlanId || livePlans().at(-1)?.id || "";
   workoutPlansUpdatedAt = remotePlans.updatedAt;
-  applyViewedPlan(activeWorkoutPlanId);
+  applyViewedPlan(getViewedPlan()?.deletedAt && !workoutSessions[selectedDate]?.[currentWorkoutId] ? activeWorkoutPlanId : viewedWorkoutPlanId);
   currentWorkoutId = workouts.some((workout) => workout.id === currentWorkoutId) ? currentWorkoutId : workouts[0]?.id || "";
+  restoreSession(currentWorkoutId);
   localStorage.setItem(localKeys.workoutPlans(profileId), JSON.stringify(remotePlans));
   renderWorkoutPlanSelector();
   renderWorkoutSelector();
-  if (currentWorkoutId) renderWorkout(currentWorkoutId);
+  renderWorkout(currentWorkoutId);
   renderMeals();
   renderSettings();
 }
 
 function renderWorkoutPlanSelector() {
   const plan = getViewedPlan();
-  if (!plan) return;
-  const editButton = document.getElementById("editWorkoutPlan");
-  const viewingHistory = viewedWorkoutPlanId !== activeWorkoutPlanId;
-  document.getElementById("currentPlanText").textContent = viewingHistory
-    ? `${plan.name} · iniciado em ${formatPlanDate(plan.createdAt)}`
-    : `Treino vigente desde ${formatPlanDate(plan.createdAt)}`;
-  editButton.setAttribute("aria-label", viewingHistory ? "Voltar ao treino vigente" : "Ver detalhes do treino vigente");
+  const selector = document.getElementById("trainingPlanSelect");
+  selector.innerHTML = '<option value="" disabled>Selecione um programa</option>' + livePlans().map((item) =>
+    `<option value="${item.id}">${escapeHtml(item.name)}${item.id === activeWorkoutPlanId ? " · vigente" : ""}</option>`).join("");
+  selector.value = plan?.deletedAt ? "" : plan?.id || "";
+  selector.onchange = () => {
+    applyViewedPlan(selector.value);
+    renderWorkoutPlanSelector(); renderWorkoutSelector(); renderWorkout(currentWorkoutId); renderMeals();
+  };
+  document.getElementById("currentPlanText").textContent = "Editar programa";
+  document.getElementById("editWorkoutPlan").disabled = !plan || !!plan.deletedAt;
+  document.getElementById("deleteWorkoutPlan").disabled = !plan || !!plan.deletedAt;
+  document.getElementById("planContext").textContent = historicalSession
+    ? `Registro de ${formatDisplayDate(selectedDate)} · ${historicalSession.planName}${plan?.deletedAt ? " · programa excluído" : ""}${historicalSession.reconstructed ? " · ficha reconstruída dos registros antigos" : ""}`
+    : plan ? `Criado em ${formatPlanDate(plan.createdAt)} · segure um dia para reordenar`
+    : "Crie ou importe um programa para começar.";
 }
 
 function bindCalendar() {
@@ -793,12 +805,15 @@ async function selectDate(date) {
     loadDailyLogs(selectedDate),
     loadWorkoutCompletions()
   ]);
+  historicalSession = null;
+  applyViewedPlan(getViewedPlan()?.deletedAt ? activeWorkoutPlanId : viewedWorkoutPlanId);
   currentWorkoutId = workoutId;
   const historicalPlan = findPlanForWorkout(workoutId);
-  if (historicalPlan) applyViewedPlan(historicalPlan.id);
+  if (historicalPlan && (!historicalPlan.deletedAt || workoutSessions[selectedDate]?.[workoutId])) applyViewedPlan(historicalPlan.id);
   checksCache = checks;
   dailyLogsCache = dailyLogs;
   workoutCompletionCache = completions;
+  restoreSession(workoutId);
   renderMeals();
   renderWorkoutSelector();
   renderWorkoutPlanSelector();
@@ -820,6 +835,8 @@ function findPlanForWorkout(workoutId) {
 }
 
 function getTimelineWorkoutName(workoutId) {
+  const session = workoutSessions[selectedDate]?.[workoutId];
+  if (session) return session.workout.short;
   for (const plan of workoutPlans) {
     const workout = plan.workouts.find((item) => item.id === workoutId);
     if (workout) return customWorkoutNames[workout.id] || workout.short || workout.label;
@@ -851,6 +868,9 @@ function renderWorkoutTimeline() {
   }).join("");
 
   const selectedWorkouts = timelineHistoryCache[selectedDate] || [];
+  const historyLinks = selectedWorkouts.map((id) => `<button type="button" class="history-session-button" data-history-session="${id}">${escapeHtml(getTimelineWorkoutName(id))}</button>`).join("");
+  document.getElementById("daySessions").innerHTML = historyLinks;
+  document.querySelectorAll("[data-history-session]").forEach((button) => button.onclick = () => selectHistoricalWorkout(button.dataset.historySession));
   const selectedLabel = selectedDate === today ? "Hoje" : formatShortDate(selectedDate);
   document.getElementById("timelineDayDetail").textContent = selectedWorkouts.length
     ? `${selectedLabel} · ${selectedWorkouts.map(getTimelineWorkoutName).join(" + ")}`
@@ -893,7 +913,7 @@ function renderMeals() {
   hydrateIcons(grid);
 
   const dietDone = meals.filter((meal) => checksCache[meal.id]).length;
-  const workout = workouts.find((item) => item.id === currentWorkoutId) || workouts[0];
+  const workout = workouts.find((item) => item.id === currentWorkoutId) || workouts[0] || { exercises: [], short: "—" };
   const workoutDone = workout.exercises.filter((exercise) => checksCache[exercise.id]).length;
   const selectedDay = selectedDate === today ? "hoje" : selectedDate.split("-").reverse().join("/");
   document.getElementById("dailyTotal").innerHTML = `
@@ -923,6 +943,7 @@ function renderWorkoutSelector() {
     select.dataset.bound = "true";
     select.addEventListener("change", () => {
       currentWorkoutId = select.value;
+      restoreSession(currentWorkoutId);
       localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
       saveWorkoutForDate(currentWorkoutId);
       renderWorkout(currentWorkoutId);
@@ -938,13 +959,19 @@ function renderWorkoutSelector() {
         <strong>${escapeHtml(getWorkoutName(workout))}</strong>
         <small>${escapeHtml(formatShortDate(workoutCompletionCache[workout.id]))}</small>
       </button>
-    `).join("") + (viewedWorkoutPlanId === activeWorkoutPlanId
+    `).join("") + (!getViewedPlan()?.deletedAt && getViewedPlan()
       ? `<button class="workout-segment-add" type="button" data-quick-add-section aria-label="Adicionar treino" title="Adicionar treino">+</button>`
       : "");
 
+  document.getElementById("moveWorkoutEarlier").disabled = !getViewedPlan() || !!getViewedPlan()?.deletedAt;
+  document.getElementById("moveWorkoutLater").disabled = !getViewedPlan() || !!getViewedPlan()?.deletedAt;
+  bindWorkoutReorder(buttons);
   buttons.querySelectorAll("[data-workout-button]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (buttons.dataset.dragged === "true") return;
+      historicalSession = null;
       currentWorkoutId = button.dataset.workoutButton;
+      restoreSession(currentWorkoutId);
       localStorage.setItem(localKeys.workout(profileId), currentWorkoutId);
       saveWorkoutForDate(currentWorkoutId);
       renderWorkout(currentWorkoutId);
@@ -993,6 +1020,11 @@ function renderSettings() {
 
 function renderWorkout(workoutId) {
   const workout = workouts.find((item) => item.id === workoutId) || workouts[0];
+  if (!workout) {
+    document.getElementById("exerciseTable").innerHTML = "";
+    document.getElementById("exerciseList").innerHTML = '<div class="training-empty"><h3>Seu próximo ciclo começa aqui</h3><p>Crie um programa ou importe sua ficha CSV.</p><button class="secondary-action" onclick="openPlanEditor(true)">Criar programa</button></div>';
+    return;
+  }
   currentWorkoutId = workout.id;
   document.querySelectorAll(".workout-select").forEach((selector) => {
     selector.value = workout.id;
@@ -1002,11 +1034,8 @@ function renderWorkout(workoutId) {
   });
 
   document.getElementById("exerciseTable").innerHTML = workout.exercises.map((exercise, index) => {
-    const saved = notesCache[exercise.id] || {};
-    const daily = dailyLogsCache[exercise.id] || {};
-    const latest = latestWeightsCache[exercise.id] || {};
-    const machineWeight = getLatestMachineWeight(saved.machine || exercise.defaultMachine);
-    const weightValue = daily.weight || machineSuggestedWeights[exercise.id] || machineWeight?.weight || latest.weight || exercise.defaultWeight || "";
+    const fields = getExerciseFields(exercise);
+    const weightValue = fields.weight;
     const exerciseName = getExerciseName(exercise);
     return `
       <tr>
@@ -1014,19 +1043,16 @@ function renderWorkout(workoutId) {
         <td>${escapeHtml(exerciseName)}</td>
         <td>${exercise.series}</td>
         <td>${exercise.reps}</td>
-        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${weightValue}" placeholder="--" /></td>
-        <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${saved.machine || exercise.defaultMachine || ""}" placeholder="--" /></td>
+        <td><input class="table-input" inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${escapeHtml(weightValue)}" placeholder="--" /></td>
+        <td><input class="table-input" data-note="${exercise.id}" data-field="machine" value="${escapeHtml(fields.machine)}" placeholder="--" /></td>
       </tr>
     `;
   }).join("");
 
   const isWorkoutDone = Boolean(checksCache[getWorkoutCompletionKey(workout.id)]);
   document.getElementById("exerciseList").innerHTML = workout.exercises.map((exercise) => {
-    const saved = notesCache[exercise.id] || {};
-    const daily = dailyLogsCache[exercise.id] || {};
-    const latest = latestWeightsCache[exercise.id];
-    const machineWeight = getLatestMachineWeight(saved.machine || exercise.defaultMachine);
-    const weightValue = daily.weight || machineSuggestedWeights[exercise.id] || machineWeight?.weight || latest?.weight || exercise.defaultWeight || "";
+    const fields = getExerciseFields(exercise);
+    const weightValue = fields.weight;
     const exerciseName = getExerciseName(exercise);
     const isEditingName = editingExerciseId === exercise.id;
     return `
@@ -1041,29 +1067,30 @@ function renderWorkout(workoutId) {
                 <span data-icon="${isEditingName ? "check" : "edit"}"></span>
               </button>
             </div>
-            <p>${exercise.target}</p>
+            <p><strong>${escapeHtml(exercise.series)}</strong> séries <span>×</span> <strong>${escapeHtml(exercise.reps)}</strong> repetições</p>
           </div>
         </div>
         <div class="exercise-control-row">
           <label>
             <span>Peso</span>
-            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${weightValue}" placeholder="kg" />
+            <input inputmode="decimal" data-note="${exercise.id}" data-field="weight" value="${escapeHtml(weightValue)}" placeholder="kg" />
           </label>
           <label>
             <span>Máquina</span>
-            <input data-note="${exercise.id}" data-field="machine" value="${saved.machine || exercise.defaultMachine || ""}" placeholder="número" />
+            <input data-note="${exercise.id}" data-field="machine" value="${escapeHtml(fields.machine)}" placeholder="número" />
           </label>
           <button class="done-button ${checksCache[exercise.id] ? "is-done" : ""}" type="button" data-exercise-done="${exercise.id}">
             ${checksCache[exercise.id] ? "Feito" : "Não feito"}
           </button>
-          <button class="chart-button" type="button" data-chart-exercise="${exercise.id}" aria-label="Ver evolução de ${escapeHtml(exerciseName)}" title="Ver evolução">
+          <button class="chart-button" type="button" data-chart-exercise="${exercise.id}" aria-expanded="${expandedCharts.has(exercise.id)}" aria-controls="chart-${exercise.id}" aria-label="Mostrar ou ocultar evolução de ${escapeHtml(exerciseName)}" title="Mostrar ou ocultar evolução">
             <span data-icon="chart"></span>
           </button>
         </div>
         <label class="notes-field">
           <span>Observação</span>
-          <textarea data-note="${exercise.id}" data-field="notes" rows="2" placeholder="Ajuste de banco, pegada, ordem...">${saved.notes || exercise.defaultNotes || ""}</textarea>
+          <textarea data-note="${exercise.id}" data-field="notes" rows="2" placeholder="Ajuste de banco, pegada, ordem...">${escapeHtml(fields.notes)}</textarea>
         </label>
+        <section class="inline-chart" id="chart-${exercise.id}" ${expandedCharts.has(exercise.id) ? "" : "hidden"} aria-label="Evolução de carga"><p class="chart-empty">Carregando evolução…</p></section>
       </article>
     `;
   }).join("") + `
@@ -1076,13 +1103,16 @@ function renderWorkout(workoutId) {
   `;
 
   bindWorkoutFields();
+  expandedCharts.forEach((id) => refreshInlineChart(id));
   hydrateIcons(document.getElementById("exerciseList"));
 }
 
 function bindWorkoutFields() {
   document.querySelectorAll("[data-note]").forEach((field) => {
-    field.addEventListener("change", () => saveExerciseField(field.dataset.note, field.dataset.field, field.value));
-    field.addEventListener("blur", () => saveExerciseField(field.dataset.note, field.dataset.field, field.value));
+    const save = () => syncInBackground(saveExerciseField(field.dataset.note, field.dataset.field, field.value));
+    field.addEventListener("change", save);
+    field.addEventListener("blur", save);
+
   });
 
   document.querySelectorAll("[data-exercise-done]").forEach((button) => {
@@ -1127,7 +1157,7 @@ function bindWorkoutFields() {
 
   document.querySelectorAll("[data-exercise-card]").forEach((card) => {
     card.addEventListener("click", async (event) => {
-      if (event.target.closest("input, textarea, button, label")) return;
+      if (event.target.closest("input, textarea, button, label, .inline-chart")) return;
       await toggleExerciseDone(card.dataset.exerciseCard);
     });
   });
@@ -1140,6 +1170,10 @@ function bindWorkoutFields() {
 }
 
 function bindPlanEditor() {
+  document.getElementById("moveWorkoutEarlier").onclick = () => moveWorkout(currentWorkoutId, workouts.findIndex((w) => w.id === currentWorkoutId) - 1);
+  document.getElementById("moveWorkoutLater").onclick = () => moveWorkout(currentWorkoutId, workouts.findIndex((w) => w.id === currentWorkoutId) + 1);
+  document.getElementById("deleteWorkoutPlan").addEventListener("click", deleteViewedPlan);
+  document.getElementById("createWorkoutPlan").addEventListener("click", () => openPlanEditor(true));
   document.getElementById("newWorkoutPlan").addEventListener("click", () => openPlanEditor(true));
   document.getElementById("editWorkoutPlan").addEventListener("click", () => openPlanEditor(false));
   const csvInput = document.getElementById("workoutCsvInput");
@@ -1305,14 +1339,8 @@ function openPlanEditor(isNew) {
       workouts: [{ id: sectionId, short: "Treino A", label: "Treino A", note: "", exercises: [] }]
     };
   } else {
-    if (viewedWorkoutPlanId !== activeWorkoutPlanId) {
-      applyViewedPlan(activeWorkoutPlanId);
-      renderWorkoutPlanSelector();
-      renderWorkoutSelector();
-      currentWorkoutId = workouts[0]?.id || "";
-      if (currentWorkoutId) renderWorkout(currentWorkoutId);
-    }
-    planEditorDraft = structuredClone(getActivePlan());
+    if (!getViewedPlan() || getViewedPlan().deletedAt) return;
+    planEditorDraft = structuredClone(getViewedPlan());
     planEditorDraft.isNew = false;
   }
   document.getElementById("editorEyebrow").textContent = isNew ? "Um novo começo" : "Ajustar ciclo atual";
@@ -1331,6 +1359,7 @@ function closePlanEditor() {
   modal.classList.remove("is-open");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("editor-is-open");
+  planEditorDraft = null;
   planEditorDraft = null;
 }
 
@@ -1359,7 +1388,7 @@ function syncDraftFromEditor() {
 
 function renderPlanEditor() {
   const historySelect = document.getElementById("planHistorySelect");
-  historySelect.innerHTML = [...workoutPlans].reverse().map((plan) => `
+  historySelect.innerHTML = [...livePlans()].reverse().map((plan) => `
     <option value="${plan.id}">${escapeHtml(plan.name)}${plan.id === activeWorkoutPlanId ? " · vigente" : ""}</option>
   `).join("");
   historySelect.value = planEditorDraft.id;
@@ -1439,6 +1468,9 @@ function addDraftSection() {
 }
 
 async function savePlanEditor() {
+  if (!planEditorDraft.isNew) {
+    try { await preserveLegacySessions(getViewedPlan()); } catch (error) { alert(error.message); return; }
+  }
   syncDraftFromEditor();
   planEditorDraft.name = planEditorDraft.name.trim();
   if (!planEditorDraft.name) return alert("Dê um nome ao ciclo de treino.");
@@ -1489,7 +1521,8 @@ function getNextWorkoutId() {
 
 async function toggleExerciseDone(exerciseId) {
   checksCache[exerciseId] = !checksCache[exerciseId];
-  const suggestedWeight = checksCache[exerciseId] ? machineSuggestedWeights[exerciseId] : "";
+  const exercise = findExercise(exerciseId);
+  const suggestedWeight = checksCache[exerciseId] ? getExerciseFields(exercise).weight : "";
   const completionKey = getWorkoutCompletionKey(currentWorkoutId);
   const shouldCompleteWorkout = checksCache[exerciseId] && !checksCache[completionKey];
   if (shouldCompleteWorkout) {
@@ -1517,11 +1550,15 @@ async function toggleWorkoutComplete(workoutId) {
   const key = getWorkoutCompletionKey(workoutId);
   checksCache[key] = !checksCache[key];
   if (checksCache[key]) {
-    workoutCompletionCache[workoutId] = selectedDate;
+    if (!workoutCompletionCache[workoutId] || selectedDate > workoutCompletionCache[workoutId]) workoutCompletionCache[workoutId] = selectedDate;
     timelineHistoryCache[selectedDate] ||= [];
     if (!timelineHistoryCache[selectedDate].includes(workoutId)) timelineHistoryCache[selectedDate].push(workoutId);
   } else {
-    if (workoutCompletionCache[workoutId] === selectedDate) delete workoutCompletionCache[workoutId];
+    if (workoutCompletionCache[workoutId] === selectedDate) {
+      const dates = Object.keys(timelineHistoryCache).filter((date) => date !== selectedDate && timelineHistoryCache[date]?.includes(workoutId));
+      Object.keys(workoutSessions).filter((date) => date !== selectedDate && workoutSessions[date]?.[workoutId]?.completed).forEach((date) => dates.push(date));
+      workoutCompletionCache[workoutId] = dates.sort().at(-1) || "";
+    }
     timelineHistoryCache[selectedDate] = (timelineHistoryCache[selectedDate] || []).filter((id) => id !== workoutId);
     if (!timelineHistoryCache[selectedDate].length) delete timelineHistoryCache[selectedDate];
   }
@@ -1532,7 +1569,11 @@ async function toggleWorkoutComplete(workoutId) {
   syncInBackground(Promise.all([
     saveWorkoutForDate(workoutId),
     saveCheck(key, checksCache[key])
-  ]));
+  ]).then(async () => {
+    workoutCompletionCache = await loadWorkoutCompletions();
+    renderWorkoutSelector(); renderWorkoutTimeline();
+    if (currentWorkoutId === workoutId) renderWorkout(workoutId);
+  }));
 }
 
 async function loadCustomNames() {
@@ -1559,6 +1600,7 @@ async function loadCustomNames() {
 }
 
 async function persistCustomNames() {
+  persistWorkoutPlans(false);
   localStorage.setItem(localKeys.customNames(profileId), JSON.stringify({
     workouts: customWorkoutNames,
     exercises: customExerciseNames
@@ -1568,25 +1610,35 @@ async function persistCustomNames() {
   const plansPayload = {
     activePlanId: activeWorkoutPlanId,
     plans: workoutPlans,
+    schemaVersion: 2,
+    sessions: workoutSessions,
     updatedAt: new Date().toISOString()
   };
-  await supabaseClient.from("profile_settings").upsert({
-    profile_id: profileId,
-    workout_names: { ...customWorkoutNames, __workout_plans: plansPayload },
-    exercise_names: customExerciseNames,
-    updated_at: new Date().toISOString()
-  });
+  try {
+    await syncProfileSettings(plansPayload);
+  } catch (error) {
+    console.warn("Alterações salvas localmente; sincronização pendente.", error);
+    setSyncStatus("Local (sincronização pendente)");
+  }
 }
 
 async function saveWorkoutName(workoutId, value, refreshSettings = true) {
   const workout = workouts.find((item) => item.id === workoutId);
   if (!workout) return;
   const name = value.trim();
+  if (name !== getWorkoutName(workout)) {
+    try { await preserveLegacySessions(getViewedPlan()); } catch (error) { alert(error.message); return; }
+  }
   if (!name || name === workout.short || name === workout.label) {
     delete customWorkoutNames[workoutId];
   } else {
     customWorkoutNames[workoutId] = name;
   }
+  if (historicalSession?.workout.id === workoutId && name) {
+    historicalSession.workout.short = name; historicalSession.workout.label = name;
+    workout.short = name; workout.label = name;
+  }
+  persistWorkoutPlans(false);
   await persistCustomNames();
   renderWorkoutSelector();
   renderWorkout(currentWorkoutId);
@@ -1610,22 +1662,20 @@ async function saveExerciseName(exerciseId, value) {
   const exercise = findExercise(exerciseId);
   if (!exercise) return;
   const name = value.trim();
-  if (name) exercise.name = name;
+  if (name === getExerciseName(exercise)) { editingExerciseId = ""; renderWorkout(currentWorkoutId); return; }
+  try { await preserveLegacySessions(getViewedPlan()); } catch (error) { alert(error.message); return; }
+  if (name) {
+    exercise.name = name;
+    const template = getViewedPlan()?.workouts.flatMap((w) => w.exercises).find((e) => e.id === exerciseId);
+    if (template && !getViewedPlan().deletedAt) template.name = name;
+    const recorded = workoutSessions[selectedDate]?.[currentWorkoutId]?.workout.exercises.find((e) => e.id === exerciseId);
+    if (recorded) recorded.name = name;
+  }
   delete customExerciseNames[exerciseId];
   editingExerciseId = "";
   persistWorkoutPlans(false);
   await persistCustomNames();
   renderWorkout(currentWorkoutId);
-}
-
-function bindChartModal() {
-  document.querySelectorAll("[data-chart-close]").forEach((button) => {
-    button.addEventListener("click", closeExerciseChart);
-  });
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeExerciseChart();
-  });
 }
 
 async function loadNotes() {
@@ -1652,57 +1702,31 @@ async function loadChecks(date = selectedDate) {
 }
 
 async function loadWorkoutCompletions() {
-  const latest = {};
-  const timeline = {};
-  const timelineStart = getTimelineDates()[0];
-  const prefix = getLocalChecksPrefix();
+  const checksByDate = {};
   const completionPrefix = getWorkoutCompletionKey("");
-
-  Object.keys(localStorage)
-    .filter((key) => key.startsWith(prefix))
-    .forEach((key) => {
-      const date = key.replace(prefix, "");
-      const checks = JSON.parse(localStorage.getItem(key) || "{}");
-      Object.entries(checks).forEach(([itemId, completed]) => {
-        if (!completed || !itemId.startsWith(completionPrefix)) return;
-        const workoutId = itemId.replace(completionPrefix, "");
-        if (!latest[workoutId] || date > latest[workoutId]) latest[workoutId] = date;
-        if (date >= timelineStart) {
-          timeline[date] ||= [];
-          if (!timeline[date].includes(workoutId)) timeline[date].push(workoutId);
-        }
-      });
-    });
-
-  if (!supabaseClient) {
-    timelineHistoryCache = timeline;
-    return latest;
-  }
-
-  const { data, error } = await supabaseClient
-    .from("daily_checks")
-    .select("check_date, item_id")
-    .eq("profile_id", profileId)
-    .eq("completed", true)
-    .like("item_id", `${completionPrefix}%`)
-    .order("check_date", { ascending: false });
-
-  if (error) {
-    timelineHistoryCache = timeline;
-    return latest;
-  }
-
-  data.forEach((item) => {
-    const workoutId = item.item_id.replace(completionPrefix, "");
-    if (!latest[workoutId] || item.check_date > latest[workoutId]) {
-      latest[workoutId] = item.check_date;
-    }
-    if (item.check_date >= timelineStart) {
-      timeline[item.check_date] ||= [];
-      if (!timeline[item.check_date].includes(workoutId)) timeline[item.check_date].push(workoutId);
-    }
+  Object.entries(workoutSessions).forEach(([date, sessions]) => {
+    checksByDate[date] = Object.fromEntries(Object.entries(sessions).map(([id, session]) => [getWorkoutCompletionKey(id), session.completed]));
   });
-
+  Object.keys(localStorage).filter((key) => key.startsWith(getLocalChecksPrefix())).forEach((key) => {
+    const date = key.replace(getLocalChecksPrefix(), "");
+    checksByDate[date] = { ...checksByDate[date], ...JSON.parse(localStorage.getItem(key) || "{}") };
+  });
+  if (supabaseClient) {
+    try {
+      const data = await fetchAllProfileRows("daily_checks", "check_date,item_id,completed", "check_date");
+      data.forEach((item) => {
+        checksByDate[item.check_date] ||= {};
+        checksByDate[item.check_date][item.item_id] = item.completed;
+      });
+    } catch (error) { console.warn(error.message); }
+  }
+  const latest = {}; const timeline = {}; const timelineStart = getTimelineDates()[0];
+  Object.entries(checksByDate).forEach(([date, checks]) => Object.entries(checks).forEach(([key, completed]) => {
+    if (!completed || !key.startsWith(completionPrefix)) return;
+    const id = key.slice(completionPrefix.length);
+    if (!latest[id] || date > latest[id]) latest[id] = date;
+    if (date >= timelineStart) { timeline[date] ||= []; timeline[date].push(id); }
+  }));
   timelineHistoryCache = timeline;
   return latest;
 }
@@ -1769,28 +1793,19 @@ async function loadLatestWeights() {
 }
 
 async function saveExerciseField(exerciseId, field, value) {
+  if (dailyLogsCache[exerciseId]?.[field] === value) return;
   if (field === "weight") {
     await saveDailyExerciseWeight(exerciseId, value);
     return;
   }
 
-  const previousMachine = notesCache[exerciseId]?.machine || "";
   notesCache[exerciseId] = { ...(notesCache[exerciseId] || {}), [field]: value };
+  dailyLogsCache[exerciseId] = { ...getExerciseFields(findExercise(exerciseId)), recorded: false, ...(dailyLogsCache[exerciseId] || {}), [field]: value };
   localStorage.setItem(localKeys.notes(profileId), JSON.stringify(notesCache));
+  localStorage.setItem(`${dailyLogPrefix(profileId)}${selectedDate}`, JSON.stringify(dailyLogsCache));
+  captureSession(currentWorkoutId);
 
-  if (field === "machine") {
-    const latestMachineWeight = getLatestMachineWeight(value, normalizeMachine(previousMachine) === normalizeMachine(value) ? "" : exerciseId);
-    if (latestMachineWeight?.weight) {
-      machineSuggestedWeights[exerciseId] = latestMachineWeight.weight;
-      document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
-        input.value = latestMachineWeight.weight;
-      });
-    } else {
-      delete machineSuggestedWeights[exerciseId];
-    }
-  }
-
-  if (field === "notes") {
+  if (field === "notes" && !historicalSession) {
     const exercise = findExercise(exerciseId);
     if (exercise) {
       exercise.defaultNotes = value;
@@ -1814,44 +1829,23 @@ async function saveExerciseField(exerciseId, field, value) {
 }
 
 async function saveDailyExerciseWeight(exerciseId, weight) {
-  dailyLogsCache[exerciseId] = { ...(dailyLogsCache[exerciseId] || {}), weight };
-  delete machineSuggestedWeights[exerciseId];
-  const machine = notesCache[exerciseId]?.machine || findExercise(exerciseId)?.defaultMachine || "";
-  const machineLogId = machine ? getMachineLogId(machine) : "";
-  if (machineLogId) dailyLogsCache[machineLogId] = { weight };
+  const fields = getExerciseFields(findExercise(exerciseId));
+  dailyLogsCache[exerciseId] = { ...fields, ...(dailyLogsCache[exerciseId] || {}), weight, recorded: true };
   localStorage.setItem(`${dailyLogPrefix(profileId)}${selectedDate}`, JSON.stringify(dailyLogsCache));
-  if (weight && (!latestWeightsCache[exerciseId] || selectedDate >= latestWeightsCache[exerciseId].date)) {
-    latestWeightsCache[exerciseId] = { date: selectedDate, weight };
-  }
-  if (machineLogId && weight && (!latestWeightsCache[machineLogId] || selectedDate >= latestWeightsCache[machineLogId].date)) {
-    latestWeightsCache[machineLogId] = { date: selectedDate, weight };
-  }
+  latestWeightsCache = await loadLatestWeights();
   await saveWorkoutForDate(currentWorkoutId);
-
-  document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => {
-    if (input.value !== weight) input.value = weight;
-  });
-
+  document.querySelectorAll(`[data-note="${exerciseId}"][data-field="weight"]`).forEach((input) => { input.value = weight; });
+  expandedCharts.forEach((id) => refreshInlineChart(id));
   if (!supabaseClient) return;
-  const records = [{
-    profile_id: profileId,
-    log_date: selectedDate,
-    exercise_id: exerciseId,
-    weight,
-    updated_at: new Date().toISOString()
-  }];
-  if (machineLogId) records.push({
-    profile_id: profileId,
-    log_date: selectedDate,
-    exercise_id: machineLogId,
-    weight,
-    updated_at: new Date().toISOString()
+  const { error } = await supabaseClient.from("daily_exercise_logs").upsert({
+    profile_id: profileId, log_date: selectedDate, exercise_id: exerciseId, weight, updated_at: new Date().toISOString()
   });
-  await supabaseClient.from("daily_exercise_logs").upsert(records);
+  if (error) throw error;
 }
 
 async function saveCheck(itemId, completed) {
   localStorage.setItem(localKeys.checks(profileId, selectedDate), JSON.stringify(checksCache));
+  if (itemId.startsWith("workout-done:") || workouts.some((w) => w.exercises.some((e) => e.id === itemId))) captureSession(currentWorkoutId);
   if (!supabaseClient) return;
   await supabaseClient.from("daily_checks").upsert({
     profile_id: profileId,
@@ -1863,6 +1857,8 @@ async function saveCheck(itemId, completed) {
 }
 
 async function saveWorkoutForDate(workoutId) {
+  if (!workoutId) return;
+  if (hasWorkoutActivity(workoutId)) captureSession(workoutId);
   localStorage.setItem(localKeys.workoutForDate(profileId, selectedDate), workoutId);
   if (!supabaseClient) return;
   await supabaseClient.from("daily_workouts").upsert({
@@ -1874,42 +1870,28 @@ async function saveWorkoutForDate(workoutId) {
 }
 
 async function openExerciseChart(exerciseId) {
-  const exercise = findExercise(exerciseId);
-  if (!exercise) return;
-  const machine = notesCache[exerciseId]?.machine || exercise.defaultMachine || "";
-
-  const modal = document.getElementById("chartModal");
-  document.getElementById("chartTitle").textContent = machine ? `Máquina ${machine}` : getExerciseName(exercise);
-  document.getElementById("chartBody").innerHTML = `<p class="chart-empty">Carregando evolução...</p>`;
-  modal.classList.add("is-open");
-  modal.setAttribute("aria-hidden", "false");
-
-  const history = machine ? await loadMachineHistory(machine) : await loadExerciseHistory(exerciseId);
-  document.getElementById("chartBody").innerHTML = renderChart(history);
+  if (expandedCharts.has(exerciseId)) expandedCharts.delete(exerciseId);
+  else expandedCharts.add(exerciseId);
+  const panel = document.getElementById(`chart-${exerciseId}`);
+  if (!panel) return;
+  panel.hidden = !expandedCharts.has(exerciseId);
+  document.querySelector(`[data-chart-exercise="${exerciseId}"]`)?.setAttribute("aria-expanded", String(!panel.hidden));
+  if (!panel.hidden) await refreshInlineChart(exerciseId);
 }
 
-function closeExerciseChart() {
-  const modal = document.getElementById("chartModal");
-  modal.classList.remove("is-open");
-  modal.setAttribute("aria-hidden", "true");
+async function refreshInlineChart(exerciseId) {
+  const panel = document.getElementById(`chart-${exerciseId}`);
+  const exercise = findExercise(exerciseId);
+  if (!panel || panel.hidden || !exercise) return;
+  const owner = profileId;
+  const ids = getNamedExerciseIds(getExerciseName(exercise));
+  const name = getExerciseName(exercise);
+  const histories = await Promise.all(ids.map(async (id) => (await loadExerciseHistory(id)).filter((entry) => historyNameMatches(entry.date, id, name))));
+  if (owner === profileId && panel.isConnected) panel.innerHTML = `<h4>Evolução de carga · ${escapeHtml(getExerciseName(exercise))}</h4>` + renderChart(mergeWeightHistory(...histories));
 }
 
 function findExercise(exerciseId) {
   return workouts.flatMap((workout) => workout.exercises).find((exercise) => exercise.id === exerciseId);
-}
-
-function getExerciseIdsForMachine(machine) {
-  const normalized = normalizeMachine(machine);
-  const ids = new Set([getMachineLogId(normalized)]);
-  workoutPlans.forEach((plan) => {
-    plan.workouts.forEach((workout) => {
-      workout.exercises.forEach((exercise) => {
-        const exerciseMachine = notesCache[exercise.id]?.machine || exercise.defaultMachine || "";
-        if (normalizeMachine(exerciseMachine) === normalized) ids.add(exercise.id);
-      });
-    });
-  });
-  return [...ids];
 }
 
 function mergeWeightHistory(...collections) {
@@ -1921,27 +1903,8 @@ function mergeWeightHistory(...collections) {
   return [...unique.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function loadMachineHistory(machine) {
-  const exerciseIds = getExerciseIdsForMachine(machine);
-  const localHistory = exerciseIds.flatMap(loadLocalExerciseHistory);
-  if (!supabaseClient) return mergeWeightHistory(localHistory);
-
-  const { data, error } = await supabaseClient
-    .from("daily_exercise_logs")
-    .select("exercise_id, log_date, weight")
-    .eq("profile_id", profileId)
-    .in("exercise_id", exerciseIds)
-    .order("log_date", { ascending: true });
-  if (error) return mergeWeightHistory(localHistory);
-  const remoteHistory = data.map((item) => ({
-    date: item.log_date,
-    weight: normalizeWeight(item.weight)
-  }));
-  return mergeWeightHistory(localHistory, remoteHistory);
-}
-
 async function loadExerciseHistory(exerciseId) {
-  const localHistory = loadLocalExerciseHistory(exerciseId);
+  const localHistory = mergeWeightHistory(loadLocalExerciseHistory(exerciseId), Object.entries(workoutSessions).flatMap(([date, sessions]) => Object.values(sessions).map((session) => ({ date, weight: session.fields?.[exerciseId]?.recorded === false ? NaN : normalizeWeight(session.fields?.[exerciseId]?.weight) }))));
   if (!supabaseClient) return localHistory;
 
   const { data, error } = await supabaseClient
@@ -1952,9 +1915,7 @@ async function loadExerciseHistory(exerciseId) {
     .order("log_date", { ascending: true });
 
   if (error) return localHistory;
-  return data
-    .map((item) => ({ date: item.log_date, weight: normalizeWeight(item.weight) }))
-    .filter((item) => Number.isFinite(item.weight));
+  return mergeWeightHistory(localHistory, data.map((item) => ({ date: item.log_date, weight: normalizeWeight(item.weight) })));
 }
 
 function loadLocalExerciseHistory(exerciseId) {
@@ -1963,7 +1924,7 @@ function loadLocalExerciseHistory(exerciseId) {
     .map((key) => {
       const date = key.replace(dailyLogPrefix(profileId), "");
       const logs = JSON.parse(localStorage.getItem(key) || "{}");
-      return { date, weight: normalizeWeight(logs[exerciseId]?.weight) };
+      return { date, weight: logs[exerciseId]?.recorded === false ? NaN : normalizeWeight(logs[exerciseId]?.weight) };
     })
     .filter((item) => Number.isFinite(item.weight))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -2033,6 +1994,323 @@ function formatWeight(value) {
 
 function formatDisplayDate(date) {
   return date.split("-").reverse().join("/");
+}
+
+function livePlans() {
+  return workoutPlans.filter((plan) => !plan.deletedAt);
+}
+
+function getNamedExerciseIds(name) {
+  const ids = new Set();
+  workoutPlans.forEach((plan) => plan.workouts.forEach((workout) => workout.exercises.forEach((exercise) => {
+    if (getExerciseName(exercise) === name) ids.add(exercise.id);
+  })));
+  Object.values(workoutSessions).forEach((sessions) => Object.values(sessions).forEach((session) => {
+    session.workout.exercises.forEach((exercise) => { if (exercise.name === name) ids.add(exercise.id); });
+  }));
+  return [...ids];
+}
+
+function historyNameMatches(date, exerciseId, name) {
+  const known = Object.values(workoutSessions[date] || {}).flatMap((session) => session.workout.exercises).filter((exercise) => exercise.id === exerciseId);
+  return !known.length || known.some((exercise) => exercise.name === name);
+}
+
+function getLatestNamedRecord(exercise) {
+  if (!exercise) return null;
+  const name = getExerciseName(exercise);
+  let latest = null;
+  Object.entries(workoutSessions).forEach(([date, sessions]) => Object.values(sessions).forEach((session) => {
+    session.workout.exercises.forEach((item) => {
+      const fields = session.fields?.[item.id];
+      if (item.name === name && fields?.recorded !== false && fields?.weight !== undefined && fields.weight !== "" && (!latest || date >= latest.date)) latest = { ...fields, date };
+    });
+  }));
+  getNamedExerciseIds(name).forEach((id) => {
+    const candidate = latestWeightsCache[id];
+    if (candidate?.weight && historyNameMatches(candidate.date, id, name) && (!latest || candidate.date > latest.date)) latest = { ...candidate, machine: notesCache[id]?.machine ?? "" };
+  });
+  return latest;
+}
+
+function getExerciseFields(exercise) {
+  if (!exercise) return {};
+  const latest = getLatestNamedRecord(exercise);
+  const saved = historicalSession?.fields?.[exercise.id] || notesCache[exercise.id] || {};
+  const daily = dailyLogsCache[exercise.id] || {};
+  return {
+    weight: daily.weight ?? latest?.weight ?? exercise.defaultWeight ?? "",
+    machine: daily.machine ?? latest?.machine ?? saved.machine ?? exercise.defaultMachine ?? "",
+    notes: daily.notes ?? saved.notes ?? exercise.defaultNotes ?? ""
+  };
+}
+
+function hasWorkoutActivity(workoutId) {
+  const workout = workouts.find((w) => w.id === workoutId);
+  return !!checksCache[getWorkoutCompletionKey(workoutId)] || !!workoutSessions[selectedDate]?.[workoutId] || workout?.exercises.some((e) => checksCache[e.id] || dailyLogsCache[e.id]);
+}
+
+function captureSession(workoutId) {
+  const workout = workouts.find((item) => item.id === workoutId);
+  if (!workout) return;
+  const plan = findPlanForWorkout(workoutId);
+  const copy = structuredClone(workout);
+  copy.short = getWorkoutName(workout); copy.label = getWorkoutLabel(workout);
+  copy.exercises.forEach((e) => { e.name = getExerciseName(e); });
+  const session = {
+    planId: plan?.id || "", planName: historicalSession?.planName || plan?.name || "Programa",
+    workout: copy,
+    fields: Object.fromEntries(workout.exercises.map((e) => [e.id, { ...getExerciseFields(e), recorded: !!checksCache[e.id] || (Object.hasOwn(dailyLogsCache[e.id] || {}, "weight") && dailyLogsCache[e.id].recorded !== false) }])),
+    checks: Object.fromEntries(workout.exercises.map((e) => [e.id, !!checksCache[e.id]])),
+    completed: !!checksCache[getWorkoutCompletionKey(workoutId)]
+  };
+  workoutSessions[selectedDate] ||= {};
+  workoutSessions[selectedDate][workoutId] = session;
+  if (historicalSession) historicalSession = session;
+  persistWorkoutPlans();
+}
+
+function restoreSession(workoutId) {
+  const session = workoutSessions[selectedDate]?.[workoutId];
+  historicalSession = session || null;
+  if (!session) return;
+  currentWorkoutId = workoutId;
+  const plan = findPlanForWorkout(workoutId);
+  viewedWorkoutPlanId = plan?.id || session.planId;
+  workouts = (plan?.deletedAt ? [session.workout] : plan?.workouts || []).map((workout) => workout.id === workoutId ? structuredClone(session.workout) : workout);
+  if (!workouts.some((workout) => workout.id === workoutId)) workouts.push(structuredClone(session.workout));
+  Object.entries(session.fields || {}).forEach(([id, fields]) => { dailyLogsCache[id] = { ...fields, ...dailyLogsCache[id] }; });
+  Object.entries(session.checks || {}).forEach(([id, checked]) => { if (!(id in checksCache)) checksCache[id] = checked; });
+  if (!(getWorkoutCompletionKey(workoutId) in checksCache)) checksCache[getWorkoutCompletionKey(workoutId)] = session.completed;
+}
+
+function selectHistoricalWorkout(workoutId) {
+  const plan = findPlanForWorkout(workoutId);
+  if (plan) applyViewedPlan(plan.id);
+  currentWorkoutId = workoutId;
+  restoreSession(workoutId);
+  renderWorkoutPlanSelector(); renderWorkoutSelector(); renderWorkout(workoutId); renderMeals();
+}
+
+// Legacy records never stored historical names/prescriptions. Preserve the best
+// available definition, but never invent a relationship from a machine number.
+async function preserveLegacySessions(plan) {
+  const checksByDate = {};
+  const logsByDate = {};
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith(getLocalChecksPrefix())) checksByDate[key.replace(getLocalChecksPrefix(), "")] = JSON.parse(localStorage.getItem(key) || "{}");
+    if (key.startsWith(dailyLogPrefix(profileId))) logsByDate[key.replace(dailyLogPrefix(profileId), "")] = JSON.parse(localStorage.getItem(key) || "{}");
+  });
+  if (supabaseClient) {
+    const results = await Promise.all([
+      fetchAllProfileRows("daily_checks", "check_date,item_id,completed", "check_date"),
+      fetchAllProfileRows("daily_exercise_logs", "log_date,exercise_id,weight", "log_date")
+    ]);
+    results[0].forEach((row) => { checksByDate[row.check_date] ||= {}; checksByDate[row.check_date][row.item_id] = row.completed; });
+    results[1].forEach((row) => { logsByDate[row.log_date] ||= {}; logsByDate[row.log_date][row.exercise_id] = { ...logsByDate[row.log_date][row.exercise_id], weight: row.weight }; });
+  }
+  new Set([...Object.keys(checksByDate), ...Object.keys(logsByDate)]).forEach((date) => {
+    const checks = checksByDate[date] || {}; const logs = logsByDate[date] || {};
+    plan.workouts.forEach((workout) => {
+      if (workoutSessions[date]?.[workout.id]) return;
+      if (!checks[getWorkoutCompletionKey(workout.id)] && !workout.exercises.some((e) => checks[e.id] || logs[e.id])) return;
+      const copy = structuredClone(workout);
+      copy.short = getWorkoutName(workout); copy.label = getWorkoutLabel(workout);
+      copy.exercises.forEach((e) => { e.name = getExerciseName(e); });
+      workoutSessions[date] ||= {};
+      workoutSessions[date][workout.id] = {
+        planId: plan.id, planName: plan.name, workout: copy, reconstructed: true,
+        fields: Object.fromEntries(workout.exercises.map((e) => [e.id, {
+          weight: logs[e.id]?.weight ?? "", machine: logs[e.id]?.machine ?? notesCache[e.id]?.machine ?? e.defaultMachine ?? "",
+          notes: logs[e.id]?.notes ?? notesCache[e.id]?.notes ?? e.defaultNotes ?? ""
+        }])),
+        checks: Object.fromEntries(workout.exercises.map((e) => [e.id, !!checks[e.id]])), completed: !!checks[getWorkoutCompletionKey(workout.id)]
+      };
+    });
+  });
+}
+
+async function deleteViewedPlan() {
+  const plan = getViewedPlan();
+  if (!plan || plan.deletedAt || !confirm(`Excluir “${plan.name}”? O programa sairá da lista. Os treinos já registrados continuarão disponíveis nas respectivas datas.`)) return;
+  const button = document.getElementById("deleteWorkoutPlan");
+  button.disabled = true;
+  try {
+    await preserveLegacySessions(plan);
+    plan.deletedAt = new Date().toISOString();
+    if (plan.id === activeWorkoutPlanId) activeWorkoutPlanId = livePlans().at(-1)?.id || "";
+    applyViewedPlan(activeWorkoutPlanId);
+    persistWorkoutPlans();
+    renderWorkoutPlanSelector(); renderWorkoutSelector(); renderWorkout(currentWorkoutId); renderMeals(); renderSettings(); renderWorkoutTimeline();
+  } catch (error) { alert(error.message); button.disabled = false; }
+}
+
+function reducedWorkoutMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false;
+}
+
+function workoutPositions(container) {
+  return new Map([...container.querySelectorAll("[data-workout-button]")].map((card) => [card.dataset.workoutButton, card.getBoundingClientRect()]));
+}
+
+// FLIP: animate from the previous visual position to the new layout position.
+function animateWorkoutPositions(container, previous, excludedId = "") {
+  if (reducedWorkoutMotion()) return;
+  container.querySelectorAll("[data-workout-button]").forEach((card) => {
+    const before = previous.get(card.dataset.workoutButton);
+    if (!before || card.dataset.workoutButton === excludedId || !card.animate) return;
+    card.getAnimations?.().forEach((animation) => animation.cancel());
+    const after = card.getBoundingClientRect();
+    const x = before.left - after.left, y = before.top - after.top;
+    if (Math.abs(x) < 1 && Math.abs(y) < 1) return;
+    card.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: "translate(0, 0)" }], {
+      duration: 220, easing: "cubic-bezier(.22,.8,.3,1)"
+    });
+  });
+}
+
+function moveWorkout(workoutId, targetIndex) {
+  const plan = getViewedPlan();
+  if (!plan || plan.deletedAt) return;
+  const index = plan.workouts.findIndex((w) => w.id === workoutId);
+  if (index < 0) return;
+  targetIndex = Math.max(0, Math.min(targetIndex, plan.workouts.length - 1));
+  if (index === targetIndex) return;
+  const container = document.getElementById("trainingWorkoutButtons");
+  const previous = workoutPositions(container);
+  const scrollLeft = container.scrollLeft;
+  const [workout] = plan.workouts.splice(index, 1);
+  plan.workouts.splice(targetIndex, 0, workout);
+  workouts = plan.workouts;
+  restoreSession(currentWorkoutId);
+  persistWorkoutPlans(); renderWorkoutSelector();
+  container.scrollLeft = scrollLeft;
+  animateWorkoutPositions(container, previous);
+  document.querySelector(`[data-workout-button="${workoutId}"]`)?.focus({ preventScroll: true });
+  document.getElementById("reorderStatus").textContent = `${getWorkoutName(workout)} movido para a posição ${plan.workouts.indexOf(workout) + 1}.`;
+}
+
+function placeWorkoutPreview(container, cards, source) {
+  const index = cards.indexOf(source);
+  const addButton = container.querySelector("[data-quick-add-section]");
+  // Keep the captured source connected while its neighbours move around it.
+  cards.slice(0, index).forEach((card) => container.insertBefore(card, source));
+  cards.slice(index + 1).forEach((card) => container.insertBefore(card, addButton));
+}
+
+function bindWorkoutReorder(container) {
+  if (getViewedPlan()?.deletedAt) return;
+  container.querySelectorAll("[data-workout-button]").forEach((button) => {
+    button.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight");
+    button.title = "Segure para arrastar. No teclado, Alt + seta move o treino.";
+    button.addEventListener("keydown", (event) => {
+      if (!event.altKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      moveWorkout(button.dataset.workoutButton, getViewedPlan().workouts.findIndex((w) => w.id === button.dataset.workoutButton) + (event.key === "ArrowLeft" ? -1 : 1));
+    });
+    let timer, startX, startY, ghost, target, originalOrder, slots, initialScroll, offsetX, offsetY, dragging = false;
+    const clear = (cancel = false) => {
+      clearTimeout(timer);
+      if (!dragging) return;
+      dragging = false;
+      const floating = ghost;
+      ghost = null;
+      button.classList.remove("is-drag-source");
+      const previous = workoutPositions(container);
+      if (cancel) {
+        placeWorkoutPreview(container, originalOrder, button);
+        animateWorkoutPositions(container, previous);
+      } else if (target != null) {
+        moveWorkout(button.dataset.workoutButton, target);
+      }
+      const destination = [...container.querySelectorAll("[data-workout-button]")].find((card) => card.dataset.workoutButton === button.dataset.workoutButton);
+      const cleanup = () => { floating?.remove(); destination?.classList.remove("is-drag-source"); };
+      if (floating?.animate && destination && !reducedWorkoutMotion()) {
+        destination.classList.add("is-drag-source");
+        const rect = destination.getBoundingClientRect();
+        const landing = floating.animate([
+          { left: floating.style.left, top: floating.style.top, transform: "rotate(-2deg) scale(1.04)", opacity: 1 },
+          { left: `${rect.left}px`, top: `${rect.top}px`, transform: "rotate(0deg) scale(1)", opacity: 1 }
+        ], { duration: 230, easing: "cubic-bezier(.22,1.12,.36,1)", fill: "forwards" });
+        landing.finished.then(cleanup, cleanup);
+      } else cleanup();
+      setTimeout(() => { container.dataset.dragged = "false"; }, 100);
+      target = null;
+    };
+    button.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || container.dataset.dragged === "true") return;
+      startX = event.clientX; startY = event.clientY;
+      timer = setTimeout(() => {
+        dragging = true; container.dataset.dragged = "true";
+        originalOrder = [...container.querySelectorAll("[data-workout-button]")];
+        slots = originalOrder.map((card) => card.getBoundingClientRect());
+        initialScroll = container.scrollLeft || 0;
+        target = originalOrder.indexOf(button);
+        const rect = button.getBoundingClientRect();
+        offsetX = startX - rect.left; offsetY = startY - rect.top;
+        button.setPointerCapture(event.pointerId);
+        ghost = button.cloneNode(true); ghost.classList.add("drag-floating");
+        ghost.style.width = `${button.offsetWidth}px`;
+        ghost.style.left = `${rect.left}px`; ghost.style.top = `${rect.top}px`;
+        document.body.append(ghost);
+        if (!reducedWorkoutMotion()) ghost.animate?.([
+          { transform: "rotate(0deg) scale(1)", boxShadow: "0 0 0 #0000" },
+          { transform: "rotate(-2deg) scale(1.04)", boxShadow: "0 16px 30px #0009" }
+        ], { duration: 180, easing: "ease-out" });
+        button.classList.add("is-drag-source");
+      }, 400);
+    });
+    button.addEventListener("pointermove", (event) => {
+      if (!dragging) { if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) clearTimeout(timer); return; }
+      event.preventDefault();
+      ghost.style.left = `${event.clientX - offsetX}px`; ghost.style.top = `${event.clientY - offsetY}px`;
+      const bounds = container.getBoundingClientRect();
+      if (event.clientX > bounds.right - 35) container.scrollLeft += 12;
+      if (event.clientX < bounds.left + 35) container.scrollLeft -= 12;
+      if (event.clientY < bounds.top - 60 || event.clientY > bounds.bottom + 60) return;
+      const scrollDelta = (container.scrollLeft || 0) - initialScroll;
+      const nearest = slots.reduce((best, rect, index) => {
+        const distance = Math.abs(event.clientX - (rect.left + rect.right) / 2 + scrollDelta);
+        return distance < best.distance ? { index, distance } : best;
+      }, { index: target, distance: Infinity }).index;
+      if (nearest === target) return;
+      const previous = workoutPositions(container);
+      const cards = [...container.querySelectorAll("[data-workout-button]")].filter((card) => card !== button);
+      cards.splice(nearest, 0, button);
+      placeWorkoutPreview(container, cards, button);
+      target = nearest;
+      animateWorkoutPositions(container, previous, button.dataset.workoutButton);
+    });
+    button.addEventListener("pointerup", () => clear());
+    button.addEventListener("pointercancel", () => clear(true));
+    button.addEventListener("lostpointercapture", () => clear(true));
+    button.addEventListener("pointerleave", () => { if (!dragging) clearTimeout(timer); });
+  });
+}
+
+async function syncProfileSettings(payload) {
+  const record = {
+    profile_id: profileId,
+    workout_plans: structuredClone(payload),
+    workout_names: { ...customWorkoutNames, __workout_plans: structuredClone(payload) },
+    exercise_names: { ...customExerciseNames }, updated_at: payload.updatedAt
+  };
+  const task = settingsSyncQueue.catch(() => {}).then(async () => {
+    const { error } = await supabaseClient.from("profile_settings").upsert(record);
+    if (error) throw error;
+  });
+  settingsSyncQueue = task;
+  return task;
+}
+
+async function fetchAllProfileRows(table, columns, orderColumn) {
+  const rows = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabaseClient.from(table).select(columns).eq("profile_id", profileId).order(orderColumn).order(table === "daily_checks" ? "item_id" : "exercise_id").range(offset, offset + 999);
+    if (error) throw new Error("Não foi possível consultar todo o histórico. Tente novamente quando houver conexão.");
+    rows.push(...data);
+    if (data.length < 1000) return rows;
+  }
 }
 
 init();
