@@ -270,3 +270,70 @@ test('cancelling a drag restores the preview without persisting the tentative or
   assert.equal(env.run(`cards[0].dataset.workoutButton`),'a');
   assert.equal(env.storage['fitness:vinicius:workout-plans'],undefined);
 });
+
+function touchDragEnvironment() {
+  const env = setup();
+  env.run(`
+    const ghosts=[];
+    let prevented=0, captures=0;
+    document.body.append=(ghost)=>ghosts.push(ghost);
+    const makeCard=(id,x)=>({dataset:{workoutButton:id},style:{},offsetWidth:112,handlers:{},options:{},
+      setAttribute(){},setPointerCapture(){captures++;},classList:{add(){},remove(){},toggle(){}},
+      getBoundingClientRect:()=>({left:x,right:x+112,top:0,bottom:80}),
+      addEventListener(type,handler,options){this.handlers[type]=handler;this.options[type]=options;},
+      cloneNode(){return {style:{},classList:{add(){}},remove(){this.removed=true;}};}});
+    const cards=[makeCard('a',0),makeCard('b',122)];
+    const sourceCard=cards[0];
+    const container={dataset:{},scrollLeft:0,querySelector:()=>null,
+      insertBefore(card,ref){const i=cards.indexOf(card);if(i>=0)cards.splice(i,1);cards.splice(ref?cards.indexOf(ref):cards.length,0,card);},
+      querySelectorAll:()=>cards,getBoundingClientRect:()=>({left:0,right:300,top:0,bottom:80})};
+    bindWorkoutReorder(container);
+    const touch=(x,y=40)=>({identifier:7,clientX:x,clientY:y});
+    const touchEvent=(x,y=40)=>({touches:[touch(x,y)],changedTouches:[touch(x,y)],cancelable:true,preventDefault(){prevented++;}});
+  `);
+  return env;
+}
+
+test('mobile long press keeps dragging after pointercancel and lost capture, then saves on touchend', async () => {
+  const env = touchDragEnvironment();
+  env.run(`sourceCard.handlers.pointerdown({pointerType:'touch',button:0,clientX:50,clientY:40,pointerId:1}); sourceCard.handlers.touchstart(touchEvent(50));`);
+  await new Promise(resolve=>setTimeout(resolve,420));
+  assert.equal(env.run('ghosts.length'),1);
+  assert.equal(env.run('captures'),0);
+  env.run(`sourceCard.handlers.pointercancel({pointerType:'touch'}); sourceCard.handlers.lostpointercapture(); sourceCard.handlers.touchmove(touchEvent(65,43));`);
+  assert.equal(env.run('ghosts[0].removed'),undefined);
+  assert.equal(env.run('prevented'),1);
+  env.run(`sourceCard.handlers.touchmove(touchEvent(180));`);
+  assert.equal(env.run(`cards[0].dataset.workoutButton`),'b');
+  assert.equal(env.run(`workoutPlans[0].workouts[0].id`),'a');
+  env.run(`sourceCard.handlers.touchend(touchEvent(180));`);
+  assert.equal(env.run(`workoutPlans[0].workouts[0].id`),'b');
+  assert.equal(env.run('prevented'),3);
+  assert.equal(env.run('sourceCard.options.touchmove.passive'),false);
+});
+
+test('a normal mobile swipe before the hold threshold remains native scrolling', async () => {
+  const env=touchDragEnvironment();
+  env.run(`sourceCard.handlers.touchstart(touchEvent(50)); sourceCard.handlers.touchmove(touchEvent(75,60));`);
+  await new Promise(resolve=>setTimeout(resolve,420));
+  assert.equal(env.run('ghosts.length'),0);
+  assert.equal(env.run('prevented'),0);
+  env.run(`sourceCard.handlers.touchend(touchEvent(75,60));`);
+  assert.equal(env.storage['fitness:vinicius:workout-plans'],undefined);
+});
+
+test('touch cancellation restores the original order without saving a partial drag', async () => {
+  const env=touchDragEnvironment();
+  env.run(`sourceCard.handlers.touchstart(touchEvent(50));`);
+  await new Promise(resolve=>setTimeout(resolve,420));
+  env.run(`sourceCard.handlers.touchmove(touchEvent(180)); sourceCard.handlers.touchcancel();`);
+  assert.equal(env.run(`cards[0].dataset.workoutButton`),'a');
+  assert.equal(env.run('ghosts[0].removed'),true);
+  assert.equal(env.storage['fitness:vinicius:workout-plans'],undefined);
+});
+
+test('the day selector has no quick-add button while program editing stays available', () => {
+  const env=setup();env.run('renderWorkoutSelector()');
+  assert.doesNotMatch(env.elements.get('trainingWorkoutButtons').innerHTML,/data-quick-add-section|Adicionar treino|workout-segment-add/);
+  assert.match(env.elements.get('trainingWorkoutButtons').innerHTML,/data-workout-button/);
+});

@@ -959,9 +959,7 @@ function renderWorkoutSelector() {
         <strong>${escapeHtml(getWorkoutName(workout))}</strong>
         <small>${escapeHtml(formatShortDate(workoutCompletionCache[workout.id]))}</small>
       </button>
-    `).join("") + (!getViewedPlan()?.deletedAt && getViewedPlan()
-      ? `<button class="workout-segment-add" type="button" data-quick-add-section aria-label="Adicionar treino" title="Adicionar treino">+</button>`
-      : "");
+    `).join("");
 
   document.getElementById("moveWorkoutEarlier").disabled = !getViewedPlan() || !!getViewedPlan()?.deletedAt;
   document.getElementById("moveWorkoutLater").disabled = !getViewedPlan() || !!getViewedPlan()?.deletedAt;
@@ -977,10 +975,6 @@ function renderWorkoutSelector() {
       renderWorkout(currentWorkoutId);
       renderMeals();
     });
-  });
-  buttons.querySelector("[data-quick-add-section]")?.addEventListener("click", () => {
-    openPlanEditor(false);
-    addDraftSection();
   });
 }
 
@@ -2192,10 +2186,9 @@ function moveWorkout(workoutId, targetIndex) {
 
 function placeWorkoutPreview(container, cards, source) {
   const index = cards.indexOf(source);
-  const addButton = container.querySelector("[data-quick-add-section]");
   // Keep the captured source connected while its neighbours move around it.
   cards.slice(0, index).forEach((card) => container.insertBefore(card, source));
-  cards.slice(index + 1).forEach((card) => container.insertBefore(card, addButton));
+  cards.slice(index + 1).forEach((card) => container.insertBefore(card, null));
 }
 
 function bindWorkoutReorder(container) {
@@ -2209,8 +2202,10 @@ function bindWorkoutReorder(container) {
       moveWorkout(button.dataset.workoutButton, getViewedPlan().workouts.findIndex((w) => w.id === button.dataset.workoutButton) + (event.key === "ArrowLeft" ? -1 : 1));
     });
     let timer, startX, startY, ghost, target, originalOrder, slots, initialScroll, offsetX, offsetY, dragging = false;
+    let touchId = null, activePointerId = null;
     const clear = (cancel = false) => {
       clearTimeout(timer);
+      touchId = null; activePointerId = null;
       if (!dragging) return;
       dragging = false;
       const floating = ghost;
@@ -2237,9 +2232,10 @@ function bindWorkoutReorder(container) {
       setTimeout(() => { container.dataset.dragged = "false"; }, 100);
       target = null;
     };
-    button.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || container.dataset.dragged === "true") return;
-      startX = event.clientX; startY = event.clientY;
+    const begin = (point, pointerId = null) => {
+      clearTimeout(timer);
+      activePointerId = pointerId;
+      startX = point.clientX; startY = point.clientY;
       timer = setTimeout(() => {
         dragging = true; container.dataset.dragged = "true";
         originalOrder = [...container.querySelectorAll("[data-workout-button]")];
@@ -2248,7 +2244,7 @@ function bindWorkoutReorder(container) {
         target = originalOrder.indexOf(button);
         const rect = button.getBoundingClientRect();
         offsetX = startX - rect.left; offsetY = startY - rect.top;
-        button.setPointerCapture(event.pointerId);
+        if (activePointerId !== null) button.setPointerCapture(activePointerId);
         ghost = button.cloneNode(true); ghost.classList.add("drag-floating");
         ghost.style.width = `${button.offsetWidth}px`;
         ghost.style.left = `${rect.left}px`; ghost.style.top = `${rect.top}px`;
@@ -2259,8 +2255,8 @@ function bindWorkoutReorder(container) {
         ], { duration: 180, easing: "ease-out" });
         button.classList.add("is-drag-source");
       }, 400);
-    });
-    button.addEventListener("pointermove", (event) => {
+    };
+    const move = (event) => {
       if (!dragging) { if (Math.hypot(event.clientX - startX, event.clientY - startY) > 8) clearTimeout(timer); return; }
       event.preventDefault();
       ghost.style.left = `${event.clientX - offsetX}px`; ghost.style.top = `${event.clientY - offsetY}px`;
@@ -2280,11 +2276,43 @@ function bindWorkoutReorder(container) {
       placeWorkoutPreview(container, cards, button);
       target = nearest;
       animateWorkoutPositions(container, previous, button.dataset.workoutButton);
+    };
+    // Touch has its own non-passive path: native scrolling can cancel pointer
+    // events on iOS even after a long press. Only prevent scrolling once lifted.
+    button.addEventListener("touchstart", (event) => {
+      if (event.touches.length !== 1) { clear(true); return; }
+      if (container.dataset.dragged === "true") return;
+      const touch = event.touches[0];
+      touchId = touch.identifier;
+      begin(touch);
+    }, { passive: true });
+    button.addEventListener("touchmove", (event) => {
+      if (touchId === null) return;
+      if (event.touches.length !== 1) { clear(true); return; }
+      const touch = [...event.touches].find((item) => item.identifier === touchId);
+      if (!touch) return;
+      move({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {
+        if (event.cancelable) event.preventDefault();
+      } });
+    }, { passive: false });
+    button.addEventListener("touchend", (event) => {
+      if (touchId === null || ![...event.changedTouches].some((touch) => touch.identifier === touchId)) return;
+      if (dragging && event.cancelable) event.preventDefault();
+      clear();
+    }, { passive: false });
+    button.addEventListener("touchcancel", () => clear(true), { passive: true });
+    button.addEventListener("contextmenu", (event) => { event.preventDefault(); });
+    button.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "touch" || touchId !== null || event.button !== 0 || container.dataset.dragged === "true") return;
+      begin(event, event.pointerId);
     });
-    button.addEventListener("pointerup", () => clear());
-    button.addEventListener("pointercancel", () => clear(true));
-    button.addEventListener("lostpointercapture", () => clear(true));
-    button.addEventListener("pointerleave", () => { if (!dragging) clearTimeout(timer); });
+    button.addEventListener("pointermove", (event) => {
+      if (event.pointerType !== "touch" && touchId === null) move(event);
+    });
+    button.addEventListener("pointerup", (event) => { if (event?.pointerType !== "touch" && touchId === null) clear(); });
+    button.addEventListener("pointercancel", (event) => { if (event?.pointerType !== "touch" && touchId === null) clear(true); });
+    button.addEventListener("lostpointercapture", () => { if (activePointerId !== null) clear(true); });
+    button.addEventListener("pointerleave", () => { if (!dragging && touchId === null) clearTimeout(timer); });
   });
 }
 
