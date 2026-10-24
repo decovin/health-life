@@ -1690,3 +1690,79 @@ button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-vis
 .inline-chart .chart-empty { background: transparent; border: 0; border-radius: 0; padding: 16px 0; font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) { .drag-floating { transform: none; } }
+
+/* A single notes surface for the training cards and the program editor. */
+.notes-disclosure { min-width: 0; margin-top: 16px; border-top: 1px solid var(--line); }
+.exercise-card > .notes-disclosure { grid-column: 1 / -1; }
+.notes-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 0; list-style: none; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 500; }
+.notes-disclosure > summary::-webkit-details-marker { display: none; }
+.notes-disclosure > summary::marker { content: ""; }
+.notes-disclosure > summary:focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; border-radius: 5px; }
+.notes-chevron { flex: 0 0 18px; width: 18px; height: 18px; transition: transform 180ms ease; }
+.notes-disclosure[open] > summary .notes-chevron { transform: rotate(180deg); }
+.notes-disclosure[open] > summary { color: var(--text); }
+.notes-body { display: block; margin: 0 0 2px; }
+.notes-body textarea, .section-fields textarea { display: block; width: 100%; min-width: 0; min-height: 44px; max-height: none; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: #141719; color: var(--text); font: inherit; font-size: 14px; line-height: 1.6; resize: none; overflow: hidden; overflow-wrap: anywhere; }
+.notes-body textarea::placeholder, .section-fields textarea::placeholder { color: var(--dim); }
+
+/* The editor uses the same graphite surfaces and spacing as the journal. */
+.editor-backdrop { background: #090b0dcc; backdrop-filter: blur(6px); }
+.editor-panel { inset: max(18px, 4vh) max(18px, calc((100vw - 900px)/2)); border: 1px solid var(--line); border-radius: 16px; background: var(--bg); box-shadow: 0 24px 80px #0006; }
+.editor-header, .editor-footer { flex-shrink: 0; background: var(--bg); padding: 20px 24px; gap: 12px; }
+.editor-header p { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .08em; }
+.editor-header h2 { color: var(--text); font-size: 26px; font-weight: 600; letter-spacing: -.035em; }
+.editor-close { flex-shrink: 0; width: 40px; height: 40px; border-radius: 8px; background: var(--panel); }
+.editor-body { min-height: 0; padding: 24px; overscroll-behavior-y: contain; }
+.editor-plan-name > span, .editor-history-field > span, .section-fields label > span, .exercise-editor-row label > span { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .05em; }
+.editor-plan-name input, .section-fields input, .exercise-editor-row input, .editor-history-field select { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: #141719; color: var(--text); font-size: 15px; font-weight: 400; padding: 10px 12px; }
+.editor-plan-name input { min-height: 48px; font-size: 18px; }
+.editor-plan-name input:focus, .section-fields input:focus, .exercise-editor-row input:focus { box-shadow: none; }
+.editor-history-field { margin-bottom: 20px; }
+.editor-history-field select { width: 100%; color: var(--muted); font-size: 13px; }
+.editor-intro { margin: 26px 0 20px; }
+.editor-intro strong { color: var(--text); font-size: 17px; font-weight: 550; }
+.editor-intro p { margin-top: 7px; font-size: 12px; line-height: 1.6; }
+.section-editor-card { margin-bottom: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.section-editor-heading { padding: 16px; grid-template-columns: 30px minmax(0,1fr) 38px; background: transparent; }
+.section-index { color: var(--dim); font: 500 16px/1 ui-sans-serif, system-ui, sans-serif; }
+.section-editor-heading small { color: var(--muted); font-size: 9px; font-weight: 500; letter-spacing: .06em; }
+.section-editor-heading strong { font-size: 16px; font-weight: 550; }
+.remove-icon-button { color: var(--dim); border-radius: 7px; }
+.remove-icon-button:hover { color: #ef9c91; background: #ef9c9110; }
+.section-fields { grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 14px; padding: 18px 16px; }
+.section-fields > .wide-field { grid-column: 1 / -1; }
+.exercise-editor-list { gap: 14px; padding: 0 16px; }
+.exercise-editor-row { grid-template-columns: repeat(4,minmax(0,1fr)); align-items: start; gap: 16px 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.exercise-editor-heading { display: grid; grid-column: 1 / -1; grid-template-columns: 26px minmax(0,1fr) 36px; gap: 10px; align-items: center; }
+.exercise-editor-heading .exercise-editor-number { grid-column: auto; grid-row: auto; align-self: center; color: var(--dim); font-size: 12px; font-weight: 500; }
+.exercise-editor-heading .exercise-name-field { grid-column: auto; grid-row: auto; }
+.exercise-editor-heading .exercise-remove { grid-column: auto; grid-row: auto; align-self: end; margin: 0 0 3px; }
+.exercise-editor-row > .notes-disclosure { grid-column: 1 / -1; margin: 0; }
+.exercise-editor-row .notes-body textarea { background: var(--panel); }
+.add-exercise-button, .add-section-button { min-height: 44px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); background: transparent; font-weight: 500; font-size: 12px; }
+.add-exercise-button:hover, .add-section-button:hover { border-color: var(--orange); color: var(--orange); }
+.add-section-button { min-height: 48px; }
+.editor-footer { align-items: center; gap: 16px; }
+.editor-footer .secondary-action, .editor-footer .save-plan-button { min-height: 44px; margin: 0; border-radius: 8px; font-size: 13px; font-weight: 550; padding: 10px 18px; }
+.editor-footer .secondary-action { border: 1px solid var(--line); color: var(--text); background: transparent; }
+.editor-footer .save-plan-button { border: 1px solid var(--orange); color: #181410; background: var(--orange); box-shadow: none; }
+.editor-footer .quiet-new-plan, .editor-footer .quiet-import-plan { font-size: 12px; }
+@media (max-width: 800px) {
+  .editor-panel { inset: 0; border: 0; border-radius: 0; }
+  .editor-header, .editor-body { padding: 18px 16px; }
+  .editor-footer { padding: 12px 16px max(12px, env(safe-area-inset-bottom)); }
+}
+@media (max-width: 560px) {
+  .editor-header h2 { font-size: 23px; }
+  .section-fields { grid-template-columns: minmax(0,1fr); padding: 16px 12px; }
+  .section-editor-heading { padding: 14px 12px; }
+  .exercise-editor-list { padding: 0 10px; gap: 12px; }
+  .exercise-editor-row { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px; gap: 14px 10px; }
+  .exercise-editor-heading { grid-template-columns: 20px minmax(0,1fr) 32px; gap: 6px; }
+  .exercise-editor-row input, .section-fields input, .notes-body textarea, .section-fields textarea, .editor-plan-name input { font-size: 16px; }
+  .add-exercise-button { margin: 12px 10px 14px; }
+  .editor-footer { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 12px; }
+  .editor-footer .quiet-import-plan, .editor-footer .quiet-new-plan { margin: 0; padding: 4px 0; }
+  .editor-footer .quiet-new-plan { text-align: right; }
+  .editor-footer .save-plan-button, .editor-footer .secondary-action { width: 100%; padding: 10px 8px; }
+}

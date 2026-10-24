@@ -38,6 +38,9 @@ por origem do navegador e por perfil. Para revisar, execute `npm run dev`
 ou `python3 -m http.server 5173` e abra `http://localhost:5173`.
 
 - Escolha programas no seletor da tela de treino; editar é uma ação separada.
+- As observações do treino e do editor podem ser recolhidas pela seta. Com texto,
+  começam abertas; vazias, recolhidas. A altura acompanha o conteúdo, inclusive
+  ao apagar texto. Recolher não descarta a edição.
 - O ícone de gráfico abre/fecha a evolução no cartão e mantém a expansão
   durante alterações da ficha. Cada gráfico pode ser aberto separadamente.
 - Segure uma caixa de dia por 400 ms e arraste até outra posição. As setas

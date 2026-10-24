@@ -293,6 +293,7 @@ let workouts = activeProfile?.workouts || [];
 let workoutPlans = [];
 let workoutSessions = {};
 const expandedCharts = new Set();
+const notesDisclosureState = new Map();
 let historicalSession = null;
 let activeWorkoutPlanId = "";
 let viewedWorkoutPlanId = "";
@@ -418,6 +419,7 @@ async function init() {
   bindNavigation();
   bindCalendar();
   bindPlanEditor();
+  window.addEventListener("resize", () => resizeNotesFields(document));
   bindProfileSelection();
   window.addEventListener("focus", refreshWorkoutPlansFromRemote);
 
@@ -1080,10 +1082,7 @@ function renderWorkout(workoutId) {
             <span data-icon="chart"></span>
           </button>
         </div>
-        <label class="notes-field">
-          <span>Observação</span>
-          <textarea data-note="${exercise.id}" data-field="notes" rows="2" placeholder="Ajuste de banco, pegada, ordem...">${escapeHtml(fields.notes)}</textarea>
-        </label>
+        ${renderExerciseNotes(exercise, fields.notes)}
         <section class="inline-chart" id="chart-${exercise.id}" ${expandedCharts.has(exercise.id) ? "" : "hidden"} aria-label="Evolução de carga"><p class="chart-empty">Carregando evolução…</p></section>
       </article>
     `;
@@ -1096,6 +1095,7 @@ function renderWorkout(workoutId) {
     </div>
   `;
 
+  bindExpandableNotes(document.getElementById("exerciseList"));
   bindWorkoutFields();
   expandedCharts.forEach((id) => refreshInlineChart(id));
   hydrateIcons(document.getElementById("exerciseList"));
@@ -1151,7 +1151,7 @@ function bindWorkoutFields() {
 
   document.querySelectorAll("[data-exercise-card]").forEach((card) => {
     card.addEventListener("click", async (event) => {
-      if (event.target.closest("input, textarea, button, label, .inline-chart")) return;
+      if (event.target.closest("input, textarea, button, label, .inline-chart, .notes-disclosure")) return;
       await toggleExerciseDone(card.dataset.exerciseCard);
     });
   });
@@ -1337,14 +1337,15 @@ function openPlanEditor(isNew) {
     planEditorDraft = structuredClone(getViewedPlan());
     planEditorDraft.isNew = false;
   }
-  document.getElementById("editorEyebrow").textContent = isNew ? "Um novo começo" : "Ajustar ciclo atual";
-  document.getElementById("editorTitle").textContent = isNew ? "Monte seu novo treino" : "Edite todo o treino";
+  document.getElementById("editorEyebrow").textContent = isNew ? "Novo programa" : "Programa de treino";
+  document.getElementById("editorTitle").textContent = isNew ? "Monte seu programa" : "Editar programa";
   document.getElementById("planNameInput").value = planEditorDraft.name;
   renderPlanEditor();
   const modal = document.getElementById("planEditor");
   modal.classList.add("is-open");
   modal.setAttribute("aria-hidden", "false");
   document.body.classList.add("editor-is-open");
+  resizeNotesFields(modal);
   setTimeout(() => document.getElementById("planNameInput").focus(), 30);
 }
 
@@ -1353,7 +1354,6 @@ function closePlanEditor() {
   modal.classList.remove("is-open");
   modal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("editor-is-open");
-  planEditorDraft = null;
   planEditorDraft = null;
 }
 
@@ -1401,13 +1401,13 @@ function renderPlanEditor() {
     <article class="section-editor-card" data-section-card="${section.id}">
       <div class="section-editor-heading">
         <span class="section-index">${String(sectionIndex + 1).padStart(2, "0")}</span>
-        <div><small>SEÇÃO</small><strong>${escapeHtml(section.short || `Treino ${String.fromCharCode(65 + sectionIndex)}`)}</strong></div>
+        <div><small>DIA DE TREINO</small><strong>${escapeHtml(section.short || `Treino ${String.fromCharCode(65 + sectionIndex)}`)}</strong></div>
         <button class="remove-icon-button" type="button" data-remove-section="${section.id}" aria-label="Excluir seção"><span data-icon="trash"></span></button>
       </div>
       <div class="section-fields">
         <label><span>Nome curto</span><input data-section-field="short" value="${escapeHtml(section.short)}" placeholder="Treino A" /></label>
         <label><span>Foco da seção</span><input data-section-field="label" value="${escapeHtml(section.label)}" placeholder="Peito e tríceps" /></label>
-        <label class="wide-field"><span>Orientação</span><input data-section-field="note" value="${escapeHtml(section.note || "")}" placeholder="Ex.: 30 min de cardio ao final" /></label>
+        <label class="wide-field"><span>Orientação do dia</span><textarea data-section-field="note" data-autosize rows="1" placeholder="Ex.: 30 min de cardio ao final">${escapeHtml(section.note || "")}</textarea></label>
       </div>
       <div class="exercise-editor-list">
         ${section.exercises.map((exercise, index) => renderDraftExercise(exercise, index)).join("")}
@@ -1416,6 +1416,7 @@ function renderPlanEditor() {
     </article>
   `).join("");
   hydrateIcons(list);
+  bindExpandableNotes(list);
 
   list.querySelectorAll("[data-add-exercise]").forEach((button) => button.addEventListener("click", () => {
     syncDraftFromEditor();
@@ -1442,15 +1443,59 @@ function renderPlanEditor() {
 function renderDraftExercise(exercise, index) {
   return `
     <div class="exercise-editor-row" data-draft-exercise="${exercise.id}">
-      <div class="exercise-editor-number">${index + 1}</div>
-      <label class="exercise-name-field"><span>Exercício</span><input data-exercise-field="name" value="${escapeHtml(exercise.name)}" placeholder="Nome do exercício" /></label>
+      <div class="exercise-editor-heading">
+        <span class="exercise-editor-number">${String(index + 1).padStart(2, "0")}</span>
+        <label class="exercise-name-field"><span>Exercício</span><input data-exercise-field="name" value="${escapeHtml(exercise.name)}" placeholder="Nome do exercício" /></label>
+        <button class="remove-icon-button exercise-remove" type="button" data-remove-exercise="${exercise.id}" aria-label="Excluir exercício"><span data-icon="trash"></span></button>
+      </div>
       <label><span>Séries</span><input data-exercise-field="series" value="${escapeHtml(exercise.series)}" inputmode="numeric" placeholder="3" /></label>
       <label><span>Repetições</span><input data-exercise-field="reps" value="${escapeHtml(exercise.reps)}" placeholder="12" /></label>
       <label><span>Peso inicial</span><input data-exercise-field="defaultWeight" value="${escapeHtml(exercise.defaultWeight || "")}" placeholder="kg" /></label>
       <label><span>Máquina</span><input data-exercise-field="defaultMachine" value="${escapeHtml(exercise.defaultMachine || "")}" placeholder="nº" /></label>
-      <label class="exercise-notes-field"><span>Observação</span><input data-exercise-field="defaultNotes" value="${escapeHtml(exercise.defaultNotes || "")}" placeholder="Banco, pegada, execução..." /></label>
-      <button class="remove-icon-button exercise-remove" type="button" data-remove-exercise="${exercise.id}" aria-label="Excluir exercício"><span data-icon="trash"></span></button>
+      ${renderExerciseNotes(exercise, exercise.defaultNotes || "", true)}
     </div>`;
+}
+
+function renderExerciseNotes(exercise, text = "", editor = false) {
+  const key = `${profileId}:${editor ? "editor" : "training"}:${exercise.id}`;
+  const open = notesDisclosureState.get(key) ?? Boolean(text.trim());
+  const fields = editor
+    ? 'data-exercise-field="defaultNotes"'
+    : `data-note="${escapeHtml(exercise.id)}" data-field="notes"`;
+  return `<details class="notes-disclosure ${editor ? "exercise-notes-field" : "exercise-notes"}" data-notes-key="${escapeHtml(key)}" ${open ? "open" : ""}>
+    <summary aria-label="Mostrar ou ocultar observação de ${escapeHtml(getExerciseName(exercise))}">
+      <span>Observação</span>
+      <svg class="notes-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
+    <label class="notes-body">
+      <span class="visually-hidden">Observação de ${escapeHtml(getExerciseName(exercise))}</span>
+      <textarea ${fields} data-autosize rows="1" placeholder="Banco, pegada, execução…">${escapeHtml(text)}</textarea>
+    </label>
+  </details>`;
+}
+
+function resizeNoteField(field) {
+  if (field.closest("details") && !field.closest("details").open) return;
+  // Reset before measuring so deleting text shrinks the field as well.
+  field.style.height = "auto";
+  field.style.height = `${Math.max(44, field.scrollHeight + 2)}px`;
+}
+
+function resizeNotesFields(root) {
+  root.querySelectorAll("textarea[data-autosize]").forEach(resizeNoteField);
+}
+
+function bindExpandableNotes(root) {
+  root.querySelectorAll("[data-notes-key]").forEach((details) => {
+    details.addEventListener("toggle", () => {
+      notesDisclosureState.set(details.dataset.notesKey, details.open);
+      if (details.open) resizeNotesFields(details);
+    });
+  });
+  root.querySelectorAll("textarea[data-autosize]").forEach((field) => {
+    field.addEventListener("input", () => resizeNoteField(field));
+  });
+  resizeNotesFields(root);
 }
 
 function addDraftSection() {

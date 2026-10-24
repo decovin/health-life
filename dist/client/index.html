@@ -166,26 +166,26 @@
         </header>
         <div class="editor-body">
           <label class="editor-plan-name">
-            <span>Nome do ciclo</span>
+            <span>Nome do programa</span>
             <input id="planNameInput" maxlength="80" placeholder="Ex.: Hipertrofia · setembro" />
           </label>
           <div class="editor-intro">
-            <strong>Seções do treino</strong>
-            <p>Crie sua divisão e adicione quantos exercícios precisar.</p>
+            <strong>Dias e exercícios</strong>
+            <p>Organize a divisão, as cargas e as orientações de cada dia.</p>
           </div>
           <label class="editor-history-field">
-            <span>Consultar outro ciclo</span>
-            <select id="planHistorySelect" aria-label="Consultar outro ciclo de treino"></select>
+            <span>Consultar outro programa</span>
+            <select id="planHistorySelect" aria-label="Consultar outro programa de treino"></select>
           </label>
           <div id="sectionEditorList"></div>
-          <button class="add-section-button" id="addWorkoutSection" type="button"><span>+</span> Adicionar seção</button>
+          <button class="add-section-button" id="addWorkoutSection" type="button"><span>+</span> Adicionar dia</button>
         </div>
         <footer class="editor-footer">
           <input class="visually-hidden" id="workoutCsvInput" type="file" accept=".csv,text/csv" />
           <button class="quiet-import-plan" id="importWorkoutCsv" type="button">Importar CSV</button>
-          <button class="quiet-new-plan" id="newWorkoutPlan" type="button">Iniciar outro ciclo</button>
+          <button class="quiet-new-plan" id="newWorkoutPlan" type="button">Novo programa</button>
           <button class="secondary-action" data-editor-close type="button">Cancelar</button>
-          <button class="save-plan-button" id="saveWorkoutPlan" type="button">Salvar treino</button>
+          <button class="save-plan-button" id="saveWorkoutPlan" type="button">Salvar programa</button>
         </footer>
       </section>
     </div>
